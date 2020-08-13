@@ -27,7 +27,7 @@ jobs:
       run: echo Hello, world!
 
     - name: Run tests
-      run: python -m pytest --cov=exoplanet -v tests      
+      run: python -m pytest -v tests      
 
 #    # Runs a set of commands using the runners shell
 #    - name: Run a multi-line script
