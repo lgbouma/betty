@@ -1,14 +1,14 @@
-import pymc3 as pm
-import numpy as np
-import matplotlib.pyplot as plt
+import pytest
+import numpy as np, matplotlib.pyplot as plt, pymc3 as pm
 import pickle, os, corner
+
 from os.path import join
 from pymc3.backends.tracetab import trace_to_dataframe
-
 from betty.paths import TESTRESULTSDIR, BETTYDIR
 
 n_cpu = os.cpu_count()
 
+@pytest.mark.skip(reason="This is a boiler-plate test with no added value.")
 def test_fit_line():
 
     #################
@@ -109,3 +109,7 @@ def test_fit_line():
     fig.savefig(path3)
 
     assert os.path.exists(path3)
+
+
+if __name__ == "__main__":
+    test_fit_line()
