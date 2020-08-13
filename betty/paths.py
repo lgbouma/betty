@@ -11,10 +11,11 @@ if not os.path.exists(BETTYDIR):
     os.mkdir(BETTYDIR)
 
 DATADIR = os.path.join(os.path.dirname(list(__path__)[0]), 'data')
+TESTDATADIR = os.path.join(DATADIR, 'test_data')
 RESULTSDIR = os.path.join(os.path.dirname(list(__path__)[0]), 'results')
 TESTRESULTSDIR = os.path.join(RESULTSDIR, 'test_results')
 
-dirlist = [DATADIR, RESULTSDIR, TESTRESULTSDIR]
+dirlist = [DATADIR, TESTDATADIR, RESULTSDIR, TESTRESULTSDIR]
 for d in dirlist:
     if not os.path.exists(d):
         print(21*'*-')

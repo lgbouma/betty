@@ -1,7 +1,7 @@
 def test_imports():
 
     modules = ['betty', 'numpy', 'pymc3', 'corner', 'exoplanet',
-               'astrobase', 'lightkurve']
+               'astrobase', 'lightkurve', 'astropy']
 
     for m in modules:
 

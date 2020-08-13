@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import pickle, os, corner
 from os.path import join
 from pymc3.backends.tracetab import trace_to_dataframe
+
 from betty.paths import TESTRESULTSDIR, BETTYDIR
 
 n_cpu = os.cpu_count()

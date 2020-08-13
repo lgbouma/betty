@@ -19,7 +19,7 @@ jobs:
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
 
-    # Execute in parallax on python3.7, and 3.8.
+    # Execute in parallel on python3.7, and 3.8.
     strategy:
       matrix:
         python-version: [3.7, 3.8]
@@ -41,6 +41,7 @@ jobs:
     - name: "Install dependencies"
       run: |
         python -m pip install -U pytest
+        python -m pip install -U astropy
         python -m pip install -U pymc3
         python -m pip install -U corner
         python -m pip install -U exoplanet
@@ -52,9 +53,3 @@ jobs:
 
     - name: "Run tests"
       run: python -m pytest -v tests      
-
-#    # Runs a set of commands using the runners shell
-#    - name: Run a multi-line script
-#      run: |
-#        echo Add other actions to build,
-#        echo test, and deploy your project.
