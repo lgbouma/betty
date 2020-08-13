@@ -1,5 +1,8 @@
 # betty
 
+<img src="https://github.com/lgbouma/betty/workflows/Tests/badge.svg">
+
+
 This repo contains cookbook routines for using the
 [exoplanet](https://github.com/exoplanet-dev/exoplanet) fitting code.
 
