@@ -29,7 +29,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install -U pytest
-        python setup.py install
+        python -m pip install -U -e .
 
     - name: Run tests
       run: python -m pytest -v tests      
