@@ -3,7 +3,7 @@
 <img src="https://github.com/lgbouma/betty/workflows/Tests/badge.svg">
 
 
-This repo contains cookbook routines for using the
+This repo contains routines for using the
 [exoplanet](https://github.com/exoplanet-dev/exoplanet) fitting code.
 
 Many routines are similar to those in

@@ -1,9 +1,15 @@
 def test_imports():
 
-    try:
-        import betty as be
-        BETTY_DEP = True
-    except:
-        BETTY_DEP = False
+    modules = ['betty', 'numpy', 'pymc3', 'corner', 'exoplanet']
 
-    assert BETTY_DEP
+    for m in modules:
+
+        dep_worked = True
+
+        try:
+            exec(f"import {m}")
+            dep_worked = True
+        except:
+            dep_worked = False
+
+        assert dep_worked
