@@ -39,8 +39,8 @@ jobs:
     - name: Install dependencies
 			run: python -m pip install -U pytest
 
-		- name: Install pacakge
-			run: pip install -e .[test]
+		- name: Install package
+      run: pip install -e .[test]
 
     - name: Run tests
       run: python -m pytest -v tests      
