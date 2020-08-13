@@ -1,0 +1,12 @@
+*egg-info*
+data*
+results*
+doc*
+*pycache*
+*log*
+*synctex*
+*aux*
+*vespa*
+*.bbl
+*.blg
+*.out
