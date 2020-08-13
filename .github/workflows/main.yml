@@ -39,10 +39,13 @@ jobs:
       run: echo Hello, world!
 
     - name: "Install dependencies"
-      run: python -m pip install -U pytest
+      run: |
+        python -m pip install -U pytest
+        python -m pip install -U pymc3
+        python -m pip install -U corner
 
     - name: "Install package"
-      run: pip install -e .[test]
+      run: pip install -e .
 
     - name: "Run tests"
       run: python -m pytest -v tests      
