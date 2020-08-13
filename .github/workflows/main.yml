@@ -44,6 +44,8 @@ jobs:
         python -m pip install -U pymc3
         python -m pip install -U corner
         python -m pip install -U exoplanet
+        python -m pip install -U astrobase
+        python -m pip install -U lightkurve
 
     - name: "Install package"
       run: pip install -e .
