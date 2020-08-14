@@ -9,7 +9,7 @@ import exoplanet as xo
 from exoplanet.gp import terms, GP
 import theano.tensor as tt
 
-from betty.plotting import plot_MAP_data as plot_MAP_phot
+#from betty.plotting import plot_MAP_data as plot_MAP_phot
 from betty.constants import factor
 
 class ModelParser:

@@ -4,12 +4,12 @@ In this test, the TESS WASP-4 data are fitted simultaneously for {"period",
 """
 
 import numpy as np, matplotlib.pyplot as plt, pandas as pd, pymc3 as pm
-import pickle, os, corner
+import pickle, os, corner, pytest
 from collections import OrderedDict
 from pymc3.backends.tracetab import trace_to_dataframe
 import exoplanet as xo
 
-from os import join
+from os.path import join
 
 from betty.helpers import get_wasp4_lightcurve
 from betty.modelfitter import ModelFitter

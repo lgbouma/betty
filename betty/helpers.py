@@ -26,7 +26,7 @@ def get_wasp4_lightcurve():
     _f, _f_err = d[yval], d[yval+'_ERR']
     flux = _f/np.nanmedian(_f)
     flux_err = _f_err/np.nanmedian(_f)
-    qual = d['QUALITY'])
+    qual = d['QUALITY']
 
     tess_texp = np.nanmedian(np.diff(time))
 
