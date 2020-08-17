@@ -8,6 +8,78 @@ from betty.paths import TESTDATADIR
 from astrobase.services.identifiers import simbad_to_tic
 from astrobase.services.tesslightcurves import get_two_minute_spoc_lightcurves
 
+
+def get_model_transit(paramd, time_eval, t_exp=2/(60*24)):
+    """
+    you know the paramters, and just want to evaluate the median lightcurve.
+    """
+    import exoplanet as xo
+
+    period = paramd['period']
+    t0 = paramd['t0']
+    try:
+        r = paramd['r']
+    except KeyError:
+        r = np.exp(paramd['log_r'])
+
+    b = paramd['b']
+    u0 = paramd['u[0]']
+    u1 = paramd['u[1]']
+
+    r_star = paramd['r_star']
+    logg_star = paramd['logg_star']
+
+    try:
+        mean = paramd['mean']
+    except KeyError:
+        mean_key = [k for k in list(paramd.keys()) if 'mean' in k]
+        assert len(mean_key) == 1
+        mean_key = mean_key[0]
+        mean = paramd[mean_key]
+
+    # factor * 10**logg / r_star = rho
+    factor = 5.141596357654149e-05
+
+    rho_star = factor*10**logg_star / r_star
+
+    orbit = xo.orbits.KeplerianOrbit(
+        period=period, t0=t0, b=b, rho_star=rho_star
+    )
+
+    u = [u0, u1]
+
+    mu_transit = xo.LimbDarkLightCurve(u).get_light_curve(
+            orbit=orbit, r=r, t=time_eval, texp=t_exp
+    ).T.flatten()
+
+    return mu_transit.eval() + mean
+
+
+def _get_fitted_data_dict(m, summdf):
+
+    instr = 'tess'
+    _m = m.data[instr]
+
+    d = {
+        'x_obs': _m[0],
+        'y_obs': _m[1],
+        'y_orb': None, # NOTE: "detrended" beforehand
+        'y_resid': None, # for now.
+        'y_mod': None, # for now [could be MAP, if MAP were good]
+        'y_err': _m[2]
+    }
+
+    params = ['period', 't0', 'log_r', 'b', 'u[0]', 'u[1]', f'{instr}_mean',
+              'r_star', 'logg_star']
+
+    paramd = {k:summdf.loc[k, 'median'] for k in params}
+    y_mod_median = get_model_transit(paramd, d['x_obs'])
+    d['y_mod'] = y_mod_median
+    d['y_resid'] = d['y_obs']-y_mod_median
+
+    return d, params, paramd
+
+
 def _subset_cut(x_obs, y_obs, y_err, n=12, onlyodd=False, onlyeven=False):
     """
     n: [ t0 - n*tdur, t + n*tdur ]

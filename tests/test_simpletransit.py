@@ -23,6 +23,7 @@ from betty.paths import TESTDATADIR, TESTRESULTSDIR, BETTYDIR
 def test_simpletransit():
 
     starid = 'WASP_4'
+    modelid = 'simpletransit'
 
     datasets = OrderedDict()
     time, flux, flux_err, tess_texp = get_wasp4_lightcurve()
@@ -32,8 +33,6 @@ def test_simpletransit():
     priorpath = join(TESTDATADIR, f'{starid}_priors.py')
     priormod = SourceFileLoader('prior', priorpath).load_module()
     priordict = priormod.priordict
-
-    modelid = 'simpletransit'
 
     pklpath = join(BETTYDIR, f'test_{starid}_{modelid}.pkl')
 
@@ -60,26 +59,20 @@ def test_simpletransit():
 
     fitindiv = 0
     phaseplot = 0
-    subsetcorner = 0
-    cornerplot = 0
+    cornerplot = 1
 
-    if fitindiv:
-        outpath = join(PLOTDIR, f'{REALID}_{modelid}_fitindiv.png')
-        bp.plot_fitindiv(m, summdf, outpath, modelid=modelid)
-
+    PLOTDIR = TESTRESULTSDIR
     if phaseplot:
-        outpath = join(PLOTDIR, f'{REALID}_{modelid}_phaseplot.png')
-        # NOTE: need to figure out parameter management
+        outpath = join(PLOTDIR, f'{starid}_{modelid}_phaseplot.png')
         bp.plot_phasefold(m, summdf, outpath, modelid=modelid, inppt=1)
 
-    if subsetcorner:
-        outpath = join(PLOTDIR, f'{REALID}_{modelid}_subsetcorner.png')
-        bp.plot_subsetcorner(m, outpath)
+    if fitindiv:
+        outpath = join(PLOTDIR, f'{starid}_{modelid}_fitindiv.png')
+        bp.plot_fitindiv(m, summdf, outpath, modelid=modelid)
 
     if cornerplot:
-        outpath = join(PLOTDIR, f'{REALID}_{modelid}_cornerplot.png')
-        # NOTE: need to figure out parameter management
-        bp.plot_cornerplot(m, outpath)
+        outpath = join(PLOTDIR, f'{starid}_{modelid}_cornerplot.png')
+        bp.plot_cornerplot(list(priordict), m, outpath)
 
 
 if __name__ == "__main__":

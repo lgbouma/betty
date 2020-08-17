@@ -110,8 +110,6 @@ class ModelFitter(ModelParser):
 
         with pm.Model() as model:
 
-            #FIXME FIXME FIXME : implement from here!
-
             # Shared parameters
 
             # Stellar parameters. (Following tess.world notebooks).
