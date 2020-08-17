@@ -59,7 +59,7 @@ def test_simpletransit():
 
     fitindiv = 0
     phaseplot = 0
-    cornerplot = 1
+    cornerplot = 0
 
     PLOTDIR = TESTRESULTSDIR
     if phaseplot:
