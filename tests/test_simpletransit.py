@@ -12,7 +12,11 @@ import exoplanet as xo
 from os.path import join
 from importlib.machinery import SourceFileLoader
 
-import betty.plotting as bp
+try:
+    import betty.plotting as bp
+except ModuleNotFoundError as e:
+    print(f'WRN! {e}')
+    pass
 
 from betty.helpers import get_wasp4_lightcurve, _subset_cut
 from betty.modelfitter import ModelFitter
