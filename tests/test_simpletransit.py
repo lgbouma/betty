@@ -10,52 +10,76 @@ from pymc3.backends.tracetab import trace_to_dataframe
 import exoplanet as xo
 
 from os.path import join
+from importlib.machinery import SourceFileLoader
 
-from betty.helpers import get_wasp4_lightcurve
+import betty.plotting as bp
+
+from betty.helpers import get_wasp4_lightcurve, _subset_cut
 from betty.modelfitter import ModelFitter
 
 from betty.paths import TESTDATADIR, TESTRESULTSDIR, BETTYDIR
 
-@pytest.mark.skip(reason="[WIP]")
+
 def test_simpletransit():
 
-    time, flux, flux_err, tess_texp = get_wasp4_lightcurve()
+    starid = 'WASP_4'
 
     datasets = OrderedDict()
+    time, flux, flux_err, tess_texp = get_wasp4_lightcurve()
+    time, flux, flux_err = _subset_cut(time, flux, flux_err, n=2.0)
     datasets['tess'] = [time, flux, flux_err, tess_texp]
 
-    # dict with teff, logg, and uncertainties on each. keys matter.
-    stardict = pd.read_csv(join(TESTDATADIR, 'wasp4_starinfo.csv')).to_dict()
-    starid = stardict['starid']
+    priorpath = join(TESTDATADIR, f'{starid}_priors.py')
+    priormod = SourceFileLoader('prior', priorpath).load_module()
+    priordict = priormod.priordict
 
     modelid = 'simpletransit'
 
     pklpath = join(BETTYDIR, f'test_{starid}_{modelid}.pkl')
 
-    m = ModelFitter(modelid, datasets, stardict, plotdir=TESTRESULTSDIR,
+    m = ModelFitter(modelid, datasets, priordict, plotdir=TESTRESULTSDIR,
                     pklpath=pklpath, overwrite=0, N_samples=1000,
-                    target_accept=0.8)
+                    N_cores=os.cpu_count(), target_accept=0.8)
 
-    import IPython; IPython.embed()
+    print(pm.summary(m.trace, var_names=list(priordict)))
 
-    #FIXME: prior_d
-    summdf = pm.summary(m.trace, var_names=list(prior_d.keys()), round_to=10,
+    summdf = pm.summary(m.trace, var_names=list(priordict), round_to=10,
                         kind='stats', stat_funcs={'median':np.nanmedian},
                         extend=True)
 
-    outpath = join(PLOTDIR, f'{REALID}_{modelid}_fitindiv.png')
-    tp.plot_fitindiv(m, summdf, outpath, modelid=modelid)
+    # require: precise
+    params = ['t0', 'period']
+    for _p in params:
+        assert summdf.T[_p].loc['sd'] * 10 < priordict[_p][2]
 
-    outpath = join(PLOTDIR, f'{REALID}_{modelid}_phaseplot.png')
-    # NOTE: need to figure out parameter management
-    tp.plot_phasefold(m, summdf, outpath, modelid=modelid, inppt=1)
+    # require: priors were accurate
+    for _p in params:
+        absdiff = np.abs(summdf.T[_p].loc['mean'] - priordict[_p][1])
+        priorwidth = priordict[_p][2]
+        assert absdiff < priorwidth
 
-    outpath = join(PLOTDIR, f'{REALID}_{modelid}_subsetcorner.png')
-    tp.plot_subsetcorner(m, outpath)
+    fitindiv = 0
+    phaseplot = 0
+    subsetcorner = 0
+    cornerplot = 0
 
-    outpath = join(PLOTDIR, f'{REALID}_{modelid}_cornerplot.png')
-    # NOTE: need to figure out parameter management
-    tp.plot_cornerplot(m, outpath)
+    if fitindiv:
+        outpath = join(PLOTDIR, f'{REALID}_{modelid}_fitindiv.png')
+        bp.plot_fitindiv(m, summdf, outpath, modelid=modelid)
+
+    if phaseplot:
+        outpath = join(PLOTDIR, f'{REALID}_{modelid}_phaseplot.png')
+        # NOTE: need to figure out parameter management
+        bp.plot_phasefold(m, summdf, outpath, modelid=modelid, inppt=1)
+
+    if subsetcorner:
+        outpath = join(PLOTDIR, f'{REALID}_{modelid}_subsetcorner.png')
+        bp.plot_subsetcorner(m, outpath)
+
+    if cornerplot:
+        outpath = join(PLOTDIR, f'{REALID}_{modelid}_cornerplot.png')
+        # NOTE: need to figure out parameter management
+        bp.plot_cornerplot(m, outpath)
 
 
 if __name__ == "__main__":

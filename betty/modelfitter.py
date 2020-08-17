@@ -9,7 +9,6 @@ import exoplanet as xo
 from exoplanet.gp import terms, GP
 import theano.tensor as tt
 
-#from betty.plotting import plot_MAP_data as plot_MAP_phot
 from betty.constants import factor
 
 class ModelParser:
@@ -39,11 +38,11 @@ class ModelParser:
 
 class ModelFitter(ModelParser):
     """
-    Given a modelid of the form "transit", or "rv" and a dataframe containing
+    Given a modelid of the form "*transit", or "rv" and a dataframe containing
     (time and flux), or (time and rv), run the inference.
     """
 
-    def __init__(self, modelid, data_df, prior_d, N_samples=2000, N_cores=16,
+    def __init__(self, modelid, data_df, priordict, N_samples=2000, N_cores=16,
                  target_accept=0.8, N_chains=4, plotdir=None, pklpath=None,
                  overwrite=1, rvdf=None):
 
@@ -53,81 +52,52 @@ class ModelFitter(ModelParser):
         self.PLOTDIR = plotdir
         self.OVERWRITE = overwrite
 
-        if 'transit' == modelid:
-            self.data = data_df
-            self.x_obs = nparr(data_df['x_obs'])
-            self.y_obs = nparr(data_df['y_obs'])
-            self.y_err = nparr(data_df['y_err'])
-            self.t_exp = np.nanmedian(np.diff(self.x_obs))
+        implemented_models = ['simpletransit', 'allindivtransit',
+                              'oddindivtransit', 'evenindivtransit']
 
-        #FIXME remove
-        if modelid in ['alltransit', 'alltransit_quad',
-                       'alltransit_quaddepthvar', 'onetransit',
-                       'allindivtransit', 'tessindivtransit',
-                       'oddindivtransit', 'evenindivtransit']:
+        if modelid in implemented_models:
             assert isinstance(data_df, OrderedDict)
             self.data = data_df
+            self.priordict = priordict
+            #FIXME FIXME FIXME probably can remove from other functions, if you
+            # assign it here...
 
         if 'rv' in modelid:
             raise NotImplementedError
 
         self.initialize_model(modelid)
 
-        #FIXME remove
-        if modelid not in ['alltransit', 'alltransit_quad',
-                           'alltransit_quaddepthvar', 'onetransit',
-                           'allindivtransit', 'tessindivtransit',
-                           'oddindivtransit', 'evenindivtransit']:
-            self.verify_inputdata()
+        if modelid not in implemented_models:
+            raise NotImplementedError
 
-        #NOTE threadsafety needn't be hardcoded
+        # hard-code against thread safety. (PyMC3 + matplotlib).
         make_threadsafe = False
 
-        #FIXME remove
-        if modelid == 'transit':
+        if modelid == 'simpletransit':
             self.run_transit_inference(
-                prior_d, pklpath, make_threadsafe=make_threadsafe
-            )
-
-        elif modelid == 'onetransit':
-            self.run_onetransit_inference(
-                prior_d, pklpath, make_threadsafe=make_threadsafe
+                pklpath, make_threadsafe=make_threadsafe
             )
 
         elif modelid == 'rv':
             self.run_rv_inference(
-                prior_d, pklpath, make_threadsafe=make_threadsafe
+                pklpath, make_threadsafe=make_threadsafe
             )
 
-        elif modelid in ['alltransit', 'alltransit_quad',
-                         'alltransit_quaddepthvar']:
-            self.run_alltransit_inference(
-                prior_d, pklpath, make_threadsafe=make_threadsafe
-            )
-
-        elif modelid in ['allindivtransit', 'tessindivtransit',
-                         'oddindivtransit', 'evenindivtransit']:
+        elif modelid in ['allindivtransit', 'oddindivtransit',
+                         'evenindivtransit']:
             self.run_allindivtransit_inference(
-                prior_d, pklpath, make_threadsafe=make_threadsafe,
+                pklpath, make_threadsafe=make_threadsafe,
                 target_accept=target_accept
             )
 
 
-    def verify_inputdata(self):
-        np.testing.assert_array_equal(
-            self.x_obs,
-            self.x_obs[np.argsort(self.x_obs)]
-        )
-        assert len(self.x_obs) == len(self.y_obs)
-        assert isinstance(self.x_obs, np.ndarray)
-        assert isinstance(self.y_obs, np.ndarray)
-
-
-    def run_transit_inference(self, prior_d, pklpath, make_threadsafe=True):
+    def run_transit_inference(self, pklpath, make_threadsafe=True):
         """
-        Fit all data together for a Mandel-Agol transit. (Ignores any stellar
+        Fit transit data for an Agol+19 transit. (Ignores any stellar
         variability; believes error bars).
         """
+
+        p = self.priordict
 
         # if the model has already been run, pull the result from the
         # pickle. otherwise, run it.
@@ -140,68 +110,56 @@ class ModelFitter(ModelParser):
 
         with pm.Model() as model:
 
+            #FIXME FIXME FIXME : implement from here!
+
             # Shared parameters
 
             # Stellar parameters. (Following tess.world notebooks).
-            logg_star = pm.Normal("logg_star", mu=LOGG, sd=LOGG_STDEV)
+            logg_star = pm.Normal(
+                "logg_star", mu=p['logg_star'][1], sd=p['logg_star'][2]
+            )
+
             r_star = pm.Bound(pm.Normal, lower=0.0)(
-                "r_star", mu=RSTAR, sd=RSTAR_STDEV
+                "r_star", mu=p['r_star'][1], sd=p['r_star'][2]
             )
             rho_star = pm.Deterministic(
                 "rho_star", factor*10**logg_star / r_star
             )
 
-            # fix Rp/Rs across bandpasses, b/c you're assuming it's a planet
-            if 'quaddepthvar' not in self.modelid:
-                log_r = pm.Uniform('log_r', lower=np.log(1e-2),
-                                   upper=np.log(1), testval=prior_d['log_r'])
-                r = pm.Deterministic('r', tt.exp(log_r))
+            # fix Rp/Rs across bandpasses
+            if p['log_r'][0] == 'Uniform':
+                log_r = pm.Uniform('log_r', lower=p['log_r'][1],
+                                   upper=p['log_r'][2], testval=p['log_r'][3])
             else:
-
-                log_r_Tband = pm.Uniform('log_r_Tband', lower=np.log(1e-2),
-                                         upper=np.log(1),
-                                         testval=prior_d['log_r_Tband'])
-                r_Tband = pm.Deterministic('r_Tband', tt.exp(log_r_Tband))
-
-                log_r_Rband = pm.Uniform('log_r_Rband', lower=np.log(1e-2),
-                                         upper=np.log(1),
-                                         testval=prior_d['log_r_Rband'])
-                r_Rband = pm.Deterministic('r_Rband', tt.exp(log_r_Rband))
-
-                log_r_Bband = pm.Uniform('log_r_Bband', lower=np.log(1e-2),
-                                         upper=np.log(1),
-                                         testval=prior_d['log_r_Bband'])
-                r_Bband = pm.Deterministic('r_Bband', tt.exp(log_r_Bband))
-
-                r = r_Tband
-
+                raise NotImplementedError
+            r = pm.Deterministic('r', tt.exp(log_r))
 
             # Some orbital parameters
             t0 = pm.Normal(
-                "t0", mu=prior_d['t0'], sd=5e-3, testval=prior_d['t0']
+                "t0", mu=p['t0'][1], sd=p['t0'][2], testval=p['t0'][1]
             )
             period = pm.Normal(
-                'period', mu=prior_d['period'], sd=5e-3,
-                testval=prior_d['period']
+                'period', mu=p['period'][1], sd=p['period'][2],
+                testval=p['period'][1]
             )
             b = xo.distributions.ImpactParameter(
-                "b", ror=r, testval=prior_d['b']
+                "b", ror=r, testval=p['b'][1]
             )
+
             orbit = xo.orbits.KeplerianOrbit(
                 period=period, t0=t0, b=b, rho_star=rho_star
             )
 
-            # NOTE: limb-darkening should be bandpass specific, but we don't
-            # have the SNR to justify that, so go with TESS-dominated
+            # limb-darkening
             u0 = pm.Uniform(
-                'u[0]', lower=prior_d['u[0]']-0.15,
-                upper=prior_d['u[0]']+0.15,
-                testval=prior_d['u[0]']
+                'u[0]', lower=p['u[0]'][1],
+                upper=p['u[0]'][2],
+                testval=p['u[0]'][3]
             )
             u1 = pm.Uniform(
-                'u[1]', lower=prior_d['u[1]']-0.15,
-                upper=prior_d['u[1]']+0.15,
-                testval=prior_d['u[1]']
+                'u[1]', lower=p['u[1]'][1],
+                upper=p['u[1]'][2],
+                testval=p['u[1]'][3]
             )
             u = [u0, u1]
 
@@ -221,112 +179,31 @@ class ModelFitter(ModelParser):
 
                     # Transit parameters.
                     mean = pm.Normal(
-                        "mean", mu=prior_d[f'{name}_mean'], sd=1e-2,
-                        testval=prior_d[f'{name}_mean']
+                        "mean", mu=p[f'{name}_mean'][1],
+                        sd=p[f'{name}_mean'][2], testval=p[f'{name}_mean'][1]
                     )
 
-                    if 'quad' in self.modelid:
 
-                        if name != 'tess':
+                if self.modelid == 'simpletransit':
+                    transit_lc = star.get_light_curve(
+                        orbit=orbit, r=r, t=x, texp=texp
+                    ).T.flatten()
 
-                            # units: rel flux per day.
-                            a1 = pm.Normal(
-                                "a1", mu=prior_d[f'{name}_a1'], sd=1,
-                                testval=prior_d[f'{name}_a1']
-                            )
-                            # units: rel flux per day^2.
-                            a2 = pm.Normal(
-                                "a2", mu=prior_d[f'{name}_a2'], sd=1,
-                                testval=prior_d[f'{name}_a2']
-                            )
-
-                if self.modelid == 'alltransit':
                     lc_models[name] = pm.Deterministic(
                         f'{name}_mu_transit',
                         mean +
-                        star.get_light_curve(
-                            orbit=orbit, r=r, t=x, texp=texp
-                        ).T.flatten()
+                        transit_lc
                     )
 
-                elif self.modelid == 'alltransit_quad':
+                    roughdepths[name] = pm.Deterministic(
+                        f'{name}_roughdepth',
+                        pm.math.abs_(transit_lc).max()
+                    )
 
-                    if name != 'tess':
-                        # midpoint for this definition of the quadratic trend
-                        _tmid = np.nanmedian(x)
+                else:
+                    raise NotImplementedError
 
-                        lc_models[name] = pm.Deterministic(
-                            f'{name}_mu_transit',
-                            mean +
-                            a1*(x-_tmid) +
-                            a2*(x-_tmid)**2 +
-                            star.get_light_curve(
-                                orbit=orbit, r=r, t=x, texp=texp
-                            ).T.flatten()
-                        )
-                    elif name == 'tess':
-
-                        lc_models[name] = pm.Deterministic(
-                            f'{name}_mu_transit',
-                            mean +
-                            star.get_light_curve(
-                                orbit=orbit, r=r, t=x, texp=texp
-                            ).T.flatten()
-                        )
-
-                elif self.modelid == 'alltransit_quaddepthvar':
-
-                    if name != 'tess':
-                        # midpoint for this definition of the quadratic trend
-                        _tmid = np.nanmedian(x)
-
-                        # do custom depth-to-
-                        if (name == 'elsauce_20200401' or
-                            name == 'elsauce_20200426'
-                        ):
-                            r = r_Rband
-                        elif name == 'elsauce_20200521':
-                            r = r_Tband
-                        elif name == 'elsauce_20200614':
-                            r = r_Bband
-
-                        transit_lc = star.get_light_curve(
-                            orbit=orbit, r=r, t=x, texp=texp
-                        ).T.flatten()
-
-                        lc_models[name] = pm.Deterministic(
-                            f'{name}_mu_transit',
-                            mean +
-                            a1*(x-_tmid) +
-                            a2*(x-_tmid)**2 +
-                            transit_lc
-                        )
-
-                        roughdepths[name] = pm.Deterministic(
-                            f'{name}_roughdepth',
-                            pm.math.abs_(transit_lc).max()
-                        )
-
-                    elif name == 'tess':
-
-                        r = r_Tband
-
-                        transit_lc = star.get_light_curve(
-                            orbit=orbit, r=r, t=x, texp=texp
-                        ).T.flatten()
-
-                        lc_models[name] = pm.Deterministic(
-                            f'{name}_mu_transit',
-                            mean +
-                            transit_lc
-                        )
-
-                        roughdepths[name] = pm.Deterministic(
-                            f'{name}_roughdepth',
-                            pm.math.abs_(transit_lc).max()
-                        )
-
-                # TODO: add error bar fudge
+                # TODO: add error bar fudge in other models
                 likelihood = pm.Normal(
                     f'{name}_obs', mu=lc_models[name], sigma=yerr, observed=y
                 )
@@ -335,8 +212,6 @@ class ModelFitter(ModelParser):
             #
             # Derived parameters
             #
-            if self.modelid == 'alltransit_quaddepthvar':
-                r = r_Tband
 
             # planet radius in jupiter radii
             r_planet = pm.Deterministic(
@@ -419,7 +294,7 @@ class ModelFitter(ModelParser):
         self.map_estimate = map_estimate
 
 
-    def run_allindivtransit_inference(self, prior_d, pklpath,
+    def run_allindivtransit_inference(self, priordict, pklpath,
                                       make_threadsafe=True, target_accept=0.8):
         """
         Fit all transits (TESS+ground), allowing each transit a quadratic trend. No
@@ -430,7 +305,7 @@ class ModelFitter(ModelParser):
         raise NotImplementedError
 
 
-    def run_rv_inference(self, prior_d, pklpath, make_threadsafe=True):
+    def run_rv_inference(self, priordict, pklpath, make_threadsafe=True):
         """
         Fit RVs for Keplerian orbit.
         """
