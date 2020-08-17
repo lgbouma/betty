@@ -19,7 +19,7 @@ from betty.modelfitter import ModelFitter
 
 from betty.paths import TESTDATADIR, TESTRESULTSDIR, BETTYDIR
 
-
+@pytest.mark.skip(reason="PyMC3 sampling too cray for Github Actions.")
 def test_simpletransit():
 
     starid = 'WASP_4'
