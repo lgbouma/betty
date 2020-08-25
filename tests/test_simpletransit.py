@@ -18,30 +18,67 @@ except ModuleNotFoundError as e:
     print(f'WRN! {e}')
     pass
 
-from betty.helpers import get_wasp4_lightcurve, _subset_cut
+from betty.helpers import (
+    get_wasp4_lightcurve, _subset_cut, retrieve_tess_lcdata
+)
+from betty.posterior_table import make_posterior_table
 from betty.modelfitter import ModelFitter
 
 from betty.paths import TESTDATADIR, TESTRESULTSDIR, BETTYDIR
 
-@pytest.mark.skip(reason="PyMC3 sampling too cray for Github Actions.")
-def test_simpletransit():
+from astrobase.services.identifiers import (
+    simbad_to_tic
+)
+from astrobase.services.tesslightcurves import (
+    get_two_minute_spoc_lightcurves
+)
 
-    starid = 'WASP_4'
+EPHEMDICT = {
+    'WASP_4': {'t0': 1355.1845, 'per': 1.338231466, 'tdur':2.5/24},
+    'HAT-P-14': {'t0': 1984.6530, 'per': 4.62787, 'tdur':2.5/24}
+}
+
+
+@pytest.mark.skip(reason="PyMC3 sampling too cray for Github Actions.")
+def test_simpletransit(starid='WASP_4', N_samples=1000):
+
     modelid = 'simpletransit'
 
     datasets = OrderedDict()
-    time, flux, flux_err, tess_texp = get_wasp4_lightcurve()
-    time, flux, flux_err = _subset_cut(time, flux, flux_err, n=2.0)
+    if starid == 'WASP_4':
+        time, flux, flux_err, tess_texp = get_wasp4_lightcurve()
+    else:
+        ticid = simbad_to_tic(starid)
+        lcfiles = (
+            get_two_minute_spoc_lightcurves(ticid, download_dir=TESTDATADIR)
+        )
+        d = retrieve_tess_lcdata(
+            lcfiles, provenance='spoc', merge_sectors=1, simple_clean=1
+        )
+        time, flux, flux_err, _, tess_texp = (
+            d['time'], d['flux'], d['flux_err'], d['qual'], d['texp']
+        )
+
+    time, flux, flux_err = _subset_cut(
+        time, flux, flux_err, n=2.0, t0=EPHEMDICT[starid]['t0'],
+        per=EPHEMDICT[starid]['per'], tdur=EPHEMDICT[starid]['tdur']
+    )
+
     datasets['tess'] = [time, flux, flux_err, tess_texp]
 
     priorpath = join(TESTDATADIR, f'{starid}_priors.py')
+    if not os.path.exists(priorpath):
+        # TODO: auto-get star info. follow
+        # tessttvfinder.src.measure_transit_times_from_lightcurve by
+        # querying nasa exoplanet archive.
+        raise FileNotFoundError(f'need to create {priorpath}')
     priormod = SourceFileLoader('prior', priorpath).load_module()
     priordict = priormod.priordict
 
     pklpath = join(BETTYDIR, f'test_{starid}_{modelid}.pkl')
 
     m = ModelFitter(modelid, datasets, priordict, plotdir=TESTRESULTSDIR,
-                    pklpath=pklpath, overwrite=0, N_samples=1000,
+                    pklpath=pklpath, overwrite=0, N_samples=N_samples,
                     N_cores=os.cpu_count(), target_accept=0.8)
 
     print(pm.summary(m.trace, var_names=list(priordict)))
@@ -61,11 +98,17 @@ def test_simpletransit():
         priorwidth = priordict[_p][2]
         assert absdiff < priorwidth
 
-    fitindiv = 0
-    phaseplot = 0
-    cornerplot = 0
+    fitindiv = 1
+    phaseplot = 1
+    cornerplot = 1
+    posttable = 1
 
     PLOTDIR = TESTRESULTSDIR
+
+    if posttable:
+        outpath = join(PLOTDIR, f'{starid}_{modelid}_posteriortable.tex')
+        make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1)
+
     if phaseplot:
         outpath = join(PLOTDIR, f'{starid}_{modelid}_phaseplot.png')
         bp.plot_phasefold(m, summdf, outpath, modelid=modelid, inppt=1)
@@ -79,5 +122,7 @@ def test_simpletransit():
         bp.plot_cornerplot(list(priordict), m, outpath)
 
 
+
 if __name__ == "__main__":
-    test_simpletransit()
+    test_simpletransit(starid='HAT-P-14', N_samples=5000)
+    #test_simpletransit(starid='WASP_4', N_samples=1000)
