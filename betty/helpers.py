@@ -1,4 +1,14 @@
-import os
+"""
+Contents:
+    flatten: a function to flatten lists of lists.
+    retrieve_tess_lcdata: given lcfiles, get dict of data.
+    get_model_transit: given parameters, evaluate LC model.
+    _get_fitted_data_dict: get parameters, given ModelFitter object
+    _subset_cut: trim LC to transit windows
+
+    get_wasp4_lightcurve
+"""
+import os, collections
 import numpy as np, pandas as pd
 
 from astropy.io import fits
@@ -7,6 +17,124 @@ from betty.paths import TESTDATADIR
 
 from astrobase.services.identifiers import simbad_to_tic
 from astrobase.services.tesslightcurves import get_two_minute_spoc_lightcurves
+
+# sensible default keys to use for light curve retrieval
+LCKEYDICT = {
+    'spoc': {'time': 'TIME',
+             'flux': 'PDCSAP_FLUX',
+             'flux_err': 'PDCSAP_FLUX_ERR',
+             'qual': 'QUALITY'},
+    'cdips': {'time': 'TMID_BJD',
+              'flux': 'IRM1',
+              'flux_err': 'IRE1',
+              'qual': 'IRQ1'}
+}
+
+def flatten(l):
+    for el in l:
+        if (
+            isinstance(el, collections.Iterable) and
+            not isinstance(el, (str, bytes))
+        ):
+            yield from flatten(el)
+        else:
+            yield el
+
+
+def retrieve_tess_lcdata(lcfiles, provenance=None, merge_sectors=1,
+                         simple_clean=1):
+    """
+    retrieve_tess_lcdata: Given a list of files pointing to TESS light-curves
+    (single-sector, or multi-sector), collect them, and return requested data
+    keys.
+
+    Kwargs:
+        provenance: string. Can be 'spoc' or 'cdips'.
+
+        merge_sectors: bool/int. Whether or not to merge multisectors. If false
+        and multiple lcfiles are passed, raises error.
+
+        simple_clean: whether to apply quick-hack cleaning diagnostics (e.g.,
+        "all non-zero quality flags removed").
+
+    Returns:
+
+        lcdict: has keys
+            `d['time'], d['flux'], d['flux_err'], d['qual'], d['texp']`
+    """
+
+    allowed_provenances = ['spoc', 'cdips']
+    if provenance not in allowed_provenances:
+        raise NotImplementedError
+
+    if len(lcfiles) > 1 and not merge_sectors:
+        raise NotImplementedError
+
+    # retrieve time, flux, flux_err, and quality flags from fits files
+    getkeydict = LCKEYDICT[provenance]
+    getkeys = list(getkeydict.values())
+
+    d = {}
+    for l in lcfiles:
+        d[l] = {}
+        hdul = fits.open(l)
+        for k,v in getkeydict.items():
+            d[l][k] = hdul[1].data[v]
+        hdul.close()
+
+    # merge across sectors
+    _d = {}
+
+    for k,v in getkeydict.items():
+
+        vec = np.hstack([
+            d[l][k] for l in lcfiles
+        ])
+
+        if k == 'flux' or k == 'flux_err':
+            # stitch absolute flux levels by median-dividing (before cleaning,
+            # which will remove nans anyway)
+            vec = np.hstack([
+                d[l][k]/np.nanmedian(d[l]['flux']) for l in lcfiles
+            ])
+
+        _d[k] = vec
+
+    if not simple_clean:
+        raise NotImplementedError(
+            'you probably want to apply simple_clean '
+            'else you will have NaNs and bad quality flags.'
+        )
+
+    sel = (
+        np.isfinite(_d['time'])
+        &
+        np.isfinite(_d['flux'])
+        &
+        np.isfinite(_d['flux_err'])
+        &
+        np.isfinite(_d['qual'])
+    )
+
+    if provenance == 'spoc':
+        sel &= (_d['qual'] == 0)
+
+    elif provenance == 'cdips':
+        raise NotImplementedError('need to apply cdips quality flags')
+
+    #FIXME FIXME divding..
+    _f = _d['flux'][sel]
+    outd = {
+        'time': _d['time'][sel],
+        'flux': _f/np.nanmedian(_f),
+        'flux_err': _d['flux_err'][sel]/np.nanmedian(_f),
+        'qual': _d['qual'][sel],
+        'texp': np.nanmedian(np.diff(_d['time'][sel]))
+    }
+
+    return outd
+
+
 
 
 def get_model_transit(paramd, time_eval, t_exp=2/(60*24)):
@@ -80,15 +208,27 @@ def _get_fitted_data_dict(m, summdf):
     return d, params, paramd
 
 
-def _subset_cut(x_obs, y_obs, y_err, n=12, onlyodd=False, onlyeven=False):
+def _subset_cut(x_obs, y_obs, y_err, n=12, t0=None, per=None, tdur=None,
+                onlyodd=False, onlyeven=False):
     """
-    n: [ t0 - n*tdur, t + n*tdur ]
+    Slice a time/flux/flux_err timeseries centered on transit windows, such
+    that:
+
+        n: [ t0 - n*tdur, t + n*tdur ]
+
+    Args:
+
+        t0: midtime epoch for window
+
+        per: period [d]
+
+        tdur: rough transit duration, used as above for window slicing
+
+        onlyodd / onlyeven: boolean, for only analyzing certain subsets of the
+            data.
     """
 
-    t0 = 1355.1845
-    per = 1.338231466
-    tdur = 2.5/24 # roughly
-    epochs = np.arange(-100,100,1)
+    epochs = np.arange(-200,200,1)
     mid_times = t0 + per*epochs
 
     sel = np.zeros_like(x_obs).astype(bool)
@@ -115,7 +255,6 @@ def _subset_cut(x_obs, y_obs, y_err, n=12, onlyodd=False, onlyeven=False):
     y_err = y_err[sel]
 
     return x_obs, y_obs, y_err
-
 
 
 
