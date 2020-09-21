@@ -48,7 +48,7 @@ jobs:
         python -m pip install -U exoplanet
         python -m pip install -U astrobase
         python -m pip install -U lightkurve
-        python -m pip install -U xarray
+        python -m pip install -UIv xarray=0.15.1
 
     - name: "Install package"
       run: pip install -e .
