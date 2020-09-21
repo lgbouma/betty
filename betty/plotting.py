@@ -2,6 +2,7 @@
 plot_fitindiv
 plot_phasefold
 plot_cornerplot
+plot_1d_posterior
 """
 import os, corner, pickle
 from datetime import datetime
@@ -295,8 +296,37 @@ def plot_cornerplot(var_names, m, outpath, overwrite=1):
 
     # corner plot of posterior samples
     plt.close('all')
-    trace_df = pm.trace_to_dataframe(m.trace, varnames=var_names)
+    if isinstance(m.trace, dict):
+        trace_df = pd.DataFrame(m.trace)
+    else:
+        trace_df = pm.trace_to_dataframe(m.trace, varnames=var_names)
     fig = corner.corner(trace_df, quantiles=[0.16, 0.5, 0.84],
                         show_titles=True, title_kwargs={"fontsize": 12},
                         title_fmt='.2g')
     savefig(fig, outpath, writepdf=0, dpi=100)
+
+
+def plot_1d_posterior(samples, outpath, truth=None, xlabel=None):
+
+    set_style()
+    plt.close('all')
+
+    f, ax = plt.subplots(figsize=(4,3))
+
+    ax.hist(samples, bins=20, density=True, zorder=-1, color='k',
+            histtype='step', alpha=0.7)
+
+    if isinstance(xlabel, str):
+        ax.set_xlabel(xlabel)
+
+    if truth is not None:
+        ymin, ymax = ax.get_ylim()
+        ax.vlines(
+            truth, ymin, ymax, colors='C0', alpha=0.5,
+            linestyles='--', zorder=-2, linewidths=0.5
+        )
+        ax.set_ylim((ymin, ymax))
+
+    ax.set_ylabel('Relative probability')
+
+    savefig(f, outpath, writepdf=0)
