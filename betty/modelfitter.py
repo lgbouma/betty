@@ -23,7 +23,7 @@ class ModelParser:
 
     def verify_modelcomponents(self):
 
-        validcomponents = ['simpletransit', 'rv', 'allindivtransit']
+        validcomponents = ['simpletransit', 'rvspotorbit', 'allindivtransit']
 
         assert len(self.modelcomponents) >= 1
 
@@ -38,13 +38,13 @@ class ModelParser:
 
 class ModelFitter(ModelParser):
     """
-    Given a modelid of the form "*transit", or "rv" and a dataframe containing
+    Given a modelid of the form "*transit", "rv_*" and a dataframe containing
     (time and flux), or (time and rv), run the inference.
     """
 
     def __init__(self, modelid, data_df, priordict, N_samples=2000, N_cores=16,
                  target_accept=0.8, N_chains=4, plotdir=None, pklpath=None,
-                 overwrite=1, rvdf=None):
+                 overwrite=1):
 
         self.N_samples = N_samples
         self.N_cores = N_cores
@@ -53,7 +53,8 @@ class ModelFitter(ModelParser):
         self.OVERWRITE = overwrite
 
         implemented_models = ['simpletransit', 'allindivtransit',
-                              'oddindivtransit', 'evenindivtransit']
+                              'oddindivtransit', 'evenindivtransit',
+                              'rvorbit', 'rvspotorbit']
 
         if modelid in implemented_models:
             assert isinstance(data_df, OrderedDict)
@@ -63,7 +64,14 @@ class ModelFitter(ModelParser):
             # assign it here...
 
         if 'rv' in modelid:
-            raise NotImplementedError
+
+            if modelid == 'rvorbit':
+                raise NotImplementedError(
+                    "i haven't implented a normal keplerian orbit yet"
+                )
+
+            elif modelid == 'rvspotorbit':
+                pass
 
         self.initialize_model(modelid)
 
@@ -78,8 +86,13 @@ class ModelFitter(ModelParser):
                 pklpath, make_threadsafe=make_threadsafe
             )
 
-        elif modelid == 'rv':
-            self.run_rv_inference(
+        elif modelid == 'rvorbit':
+            self.run_rvorbit_inference(
+                pklpath, make_threadsafe=make_threadsafe
+            )
+
+        elif modelid == 'rvspotorbit':
+            self.run_rvspotorbit_inference(
                 pklpath, make_threadsafe=make_threadsafe
             )
 
@@ -303,10 +316,158 @@ class ModelFitter(ModelParser):
         raise NotImplementedError
 
 
-    def run_rv_inference(self, priordict, pklpath, make_threadsafe=True):
+    def run_rvorbit_inference(self, priordict, pklpath, make_threadsafe=True):
         """
         Fit RVs for Keplerian orbit.
         """
 
         raise NotImplementedError
         # NOTE: but see draft in timmy.modelfitter
+
+    def run_rvspotorbit_inference(self, pklpath, make_threadsafe=True):
+        """
+        Fit RVs for Keplerian orbit.
+        """
+
+        p = self.priordict
+
+        # if the model has already been run, pull the result from the
+        # pickle. otherwise, run it.
+        if os.path.exists(pklpath):
+            d = pickle.load(open(pklpath, 'rb'))
+            self.model = None
+            self.trace = d['trace']
+            self.map_estimate = d['map_estimate']
+            return 1
+
+        with pm.Model() as model:
+
+            t_offset = 2459000
+
+            # Shared parameters
+
+            # Stellar parameters.
+            m_star = pm.Bound(pm.Normal, lower=0.5)(
+                "m_star", mu=p['m_star'][1], sd=p['m_star'][2]
+            )
+            r_star = pm.Bound(pm.Normal, lower=0.5)(
+                "r_star", mu=p['r_star'][1], sd=p['r_star'][2]
+            )
+
+            # Some orbital parameters
+            t0 = pm.Normal(
+                "t0", mu=p['t0'][1]-t_offset, sd=p['t0'][2], testval=p['t0'][1]-t_offset
+            )
+            period = pm.Normal(
+                'period', mu=p['period'][1], sd=p['period'][2],
+                testval=p['period'][1]
+            )
+            if not p['b'][0] == 'Normal':
+                raise NotImplementedError(
+                    'i was writing a quick hack to make this, and did not '
+                    'implement the distribution agnosticity that i should have')
+            b = pm.Normal(
+                "b", mu=p['b'][1], sd=p['b'][2], testval=p['b'][1]
+            )
+
+            # ecs = xo.UnitDisk("ecs", shape=(2, 1), testval=0.01 * np.ones((2, 1)))
+            # ecc = pm.Deterministic("ecc", tt.sum(ecs ** 2, axis=0))
+            # omega = pm.Deterministic("omega", tt.arctan2(ecs[1], ecs[0]))
+            # xo.eccentricity.vaneylen19("ecc_prior", multi=False, shape=1, observed=ecc)
+
+            ecc = pm.Bound(pm.Normal, lower=0.001, upper=0.2)(
+                'ecc', mu=p['ecc'][1], sd=p['ecc'][2]
+            )
+            omega = pm.Uniform(
+                'omega', lower=p['omega'][1], upper=p['omega'][2]
+            )
+
+            K_orb = pm.Uniform(
+                'K_orb', lower=p['K_orb'][1], upper=p['K_orb'][2]
+            )
+
+            orbit = xo.orbits.KeplerianOrbit(period=period, b=b, t0=t0,
+                                             ecc=ecc, omega=omega,
+                                             m_star=m_star, r_star=r_star)
+
+            name = 'minerva' # NOTE: again, it was a hack
+            mean = pm.Normal(
+                f"{name}_mean", mu=p[f'{name}_mean'][1],
+                sd=p[f'{name}_mean'][2], testval=p[f'{name}_mean'][1]
+            )
+
+            # the GP model for the stellar variability
+            log_amp = pm.Bound(pm.Normal, lower=10, upper=13.8)(
+                'log_amp', mu=p['log_amp'][1], sd=p['log_amp'][2]
+            )
+            P_rot = pm.Normal(
+                'P_rot', mu=p['P_rot'][1], sd=p['P_rot'][2]
+            )
+            log_Q0 = pm.Bound(pm.Normal, upper=5, lower=0.5)(
+                'log_Q0', mu=p['log_Q0'][1], sd=p['log_Q0'][2]
+            )
+            log_deltaQ = pm.Normal(
+                'log_deltaQ', mu=p['log_deltaQ'][1], sd=p['log_deltaQ'][2]
+            )
+            mix = pm.Uniform(
+                'mix', lower=p['mix'][1], upper=p['mix'][2]
+            )
+
+            kernel = xo.gp.terms.RotationTerm(
+                log_amp=log_amp, period=P_rot, log_Q0=log_Q0,
+                log_deltaQ=log_deltaQ, mix=mix
+            )
+
+            _time = self.data[name][0] - t_offset
+            _rv = self.data[name][1]
+            _rv_err = self.data[name][2]
+
+            def mean_model(t):
+                rv_kep = pm.Deterministic(
+                    'rv_kep', orbit.get_radial_velocity(t, K=K_orb)
+                )
+                return rv_kep + mean
+
+            gp = xo.gp.GP(kernel, _time, _rv_err**2, mean=mean_model)
+            gp.marginal('rv_obs', observed=_rv)
+            pm.Deterministic('gp_pred', gp.predict())
+
+            # Optimizing
+            map_estimate = pm.find_MAP(model=model)
+
+            # start = model.test_point
+            # if 'transit' in self.modelcomponents:
+            #     map_estimate = xo.optimize(start=start,
+            #                                vars=[r, b, period, t0])
+            # map_estimate = xo.optimize(start=map_estimate)
+
+            if make_threadsafe:
+                pass
+            else:
+                # NOTE: would usually plot MAP estimate here, but really
+                # there's not a huge need.
+                print(map_estimate)
+                pass
+
+            # sample from the posterior defined by this model.
+            trace = pm.sample(
+                tune=self.N_samples, draws=self.N_samples,
+                start=map_estimate, cores=self.N_cores,
+                chains=self.N_chains,
+                step=xo.get_dense_nuts_step(target_accept=0.8),
+            )
+
+        savevars = ['t0', 'period', 'b', 'minerva_mean', 'P_rot', 'log_deltaQ',
+                    'm_star', 'r_star', 'ecc', 'omega', 'K_orb', 'log_amp',
+                    'log_Q0', 'mix']
+
+        trace_dict = {k:trace[k] for k in savevars}
+
+        with open(pklpath, 'wb') as buff:
+            pickle.dump({'trace': trace_dict,
+                         'map_estimate': map_estimate}, buff)
+
+        self.model = None
+        self.trace = trace
+        self.map_estimate = map_estimate
+
