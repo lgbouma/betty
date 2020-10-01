@@ -327,6 +327,6 @@ def plot_1d_posterior(samples, outpath, truth=None, xlabel=None):
         )
         ax.set_ylim((ymin, ymax))
 
-    ax.set_ylabel('Relative probability')
+    ax.set_ylabel('Posterior probability')
 
     savefig(f, outpath, writepdf=0)
