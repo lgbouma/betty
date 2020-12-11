@@ -222,7 +222,7 @@ def _subset_cut(x_obs, y_obs, y_err, n=12, t0=None, per=None, tdur=None,
 
         per: period [d]
 
-        tdur: rough transit duration, used as above for window slicing
+        tdur: rough transit duration (T_14), used as above for window slicing
 
         onlyodd / onlyeven: boolean, for only analyzing certain subsets of the
             data.
@@ -256,6 +256,34 @@ def _subset_cut(x_obs, y_obs, y_err, n=12, t0=None, per=None, tdur=None,
 
     return x_obs, y_obs, y_err
 
+
+def _get_flux_err_as_stdev(x_obs, y_obs, t0=None, per=None, tdur=None):
+    """
+    Given time and flux from _subset_cut above (i.e., centered on a transit),
+    return an array of the same length, with values set to be the standard
+    deviation of the flux.
+    """
+
+    epochs = np.arange(-200,200,1)
+    mid_times = t0 + per*epochs
+
+    intra = np.zeros_like(x_obs).astype(bool)
+    for tra_ind, mid_time in zip(epochs, mid_times):
+
+        prefactor = 0.7 # set to let you omit all in transit points
+        start_time = mid_time - prefactor*tdur
+        end_time = mid_time + prefactor*tdur
+        s = (x_obs > start_time) & (x_obs < end_time)
+        intra |= s
+
+    print(42*'#')
+    print(f'Number of in-transit points: {len(x_obs[intra])}.')
+    print(f'Omitting them for the estimation of time-series stdev...')
+    print(42*'#')
+
+    y_err = np.nanstd(y_obs[~intra])
+
+    return np.ones_like(y_obs)*y_err
 
 
 def get_wasp4_lightcurve():
