@@ -101,7 +101,16 @@ def plot_fitindiv(m, summdf, outpath, overwrite=1, modelid=None):
 
 
 def plot_phasefold(m, summdf, outpath, overwrite=0, show_samples=0,
-                   modelid=None, inppt=0, showerror=1):
+                   modelid=None, inppt=0, showerror=1, xlim=None,
+                   binsize_minutes=10, savepdf=0
+                  ):
+    """
+    Options:
+        inppt: Whether to median subtract and give flux in units of 1e-3.
+        xlim: can be tuple. (Units: hours)
+        binsize_minutes: bin to this many minutes in phase
+        savepdf: whether to also save a pdf vesion
+    """
 
     set_style()
 
@@ -123,7 +132,6 @@ def plot_phasefold(m, summdf, outpath, overwrite=0, show_samples=0,
     t0_orb = summdf.loc['t0', 'median']
 
     # phase and bin them.
-    binsize_minutes = 10 # bin to 10 minutes in phase
     binsize_phase = (binsize_minutes / (60*24))/P_orb # prev: 5e-4
     orb_d = phase_magseries(
         _d['x_obs'], _d['y_obs'], P_orb, t0_orb, wrap=True, sort=True
@@ -257,7 +265,8 @@ def plot_phasefold(m, summdf, outpath, overwrite=0, show_samples=0,
 
     for a in (a0, a1):
         a.set_xlim((-5, 5)) # hours
-        # a.set_xlim((-0.02*P_orb*24, 0.02*P_orb*24))
+        if isinstance(xlim, tuple):
+            a.set_xlim(xlim) # hours
 
     if showerror:
         trans = transforms.blended_transform_factory(
@@ -265,9 +274,11 @@ def plot_phasefold(m, summdf, outpath, overwrite=0, show_samples=0,
         if inppt:
             _e = 1e3*np.median(_d['y_err'])
 
-            bintime = binsize_phase*P_orb*24*60 # minutes
-            sampletime = 2 # minutes
-            errorfactor = (sampletime/bintime)**(1/2)
+            sampletime = np.nanmedian(np.diff(_d['x_obs']))*24*60 # minutes
+            if binsize_minutes > sampletime:
+                errorfactor = (sampletime/binsize_minutes)**(1/2)
+            else:
+                errorfactor = (binsize_minutes/sampletime)**(1/2)
 
             ydiff = np.abs(a0.get_ylim()[1] - a0.get_ylim()[0])
             _y = a0.get_ylim()[0] + 0.1*ydiff
@@ -278,14 +289,14 @@ def plot_phasefold(m, summdf, outpath, overwrite=0, show_samples=0,
                 transform=trans
             )
 
-            print(f'{_e:.2f}, {errorfactor*_e:.2f}')
+            print(f'Median error [ppt]: {_e:.2f}, errorfactor: {errorfactor*_e:.2f}')
 
         else:
             raise NotImplementedError
 
     fig.tight_layout()
 
-    savefig(fig, outpath, writepdf=0, dpi=300)
+    savefig(fig, outpath, writepdf=savepdf, dpi=300)
 
 
 
