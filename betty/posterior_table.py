@@ -54,7 +54,8 @@ def loguniform_str(lower, upper, fmtstr=None):
 # main driver function
 ##########################################
 
-def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1):
+def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
+                         overwrite=1):
     """
     Given the output chains from betty.modelfitter, turn them into a LaTeX
     table that you can publish.
@@ -75,8 +76,10 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1):
     scols = ['median', 'mean', 'sd', 'hpd_3%', 'hpd_97%', 'ess_mean',
              'r_hat_minus1']
 
-    if not os.path.exists(summarypath):
+    if os.path.exists(summarypath) and not overwrite:
+        df = pd.read_csv(summarypath, index_col=0)
 
+    else:
         with open(pklpath, 'rb') as f:
             d = pickle.load(f)
 
@@ -104,9 +107,6 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1):
         outdf = df[scols]
 
         outdf.to_csv(summarypath, index=True)
-
-    else:
-        df = pd.read_csv(summarypath, index_col=0)
 
     fitted_params = list(priordict.keys())
 
