@@ -6,6 +6,7 @@ table that you can publish.
 import os, re, pickle
 from copy import deepcopy
 import numpy as np, pandas as pd, matplotlib.pyplot as plt, pymc3 as pm
+from betty.helpers import flatten
 
 ##########################################
 # helper functions for string generation
@@ -160,11 +161,14 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
             fmtstr='({:.3f}; {:.3f})'
         )
     }
+
     ufmt = '({:.2f}; {:.2f})'
-
-    pr[f'tess_mean'] = normal_str(mu=priordict[f'tess_mean'][1],
-                                  sd=priordict[f'tess_mean'][2], fmtstr=ufmt)
-
+    for k in list(priordict.keys()):
+        # e.g., 'tess_mean', 'ground_2_mean", etc
+        if '_mean' in k:
+            pr[k] = normal_str(
+                mu=priordict[k][1], sd=priordict[k][2], fmtstr=ufmt
+            )
 
     for d in derived_params:
         pr[d] = '--'
@@ -200,7 +204,11 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
         'r_star': r'$R_\odot$',
         'logg_star': 'cgs'
     }
-    ud[f'tess_mean'] = '--'
+
+    for k in list(priordict.keys()):
+        # e.g., 'tess_mean', 'ground_2_mean", etc
+        if '_mean' in k:
+            ud[k] = '--'
 
     ud['r'] = '--'
     ud['rho_star'] = 'g$\ $cm$^{-3}$'
@@ -228,9 +236,15 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
         "$R_\star$",
         "$\log g$"
     ]
-    latexparams.append(r'$\langle f \rangle$')
 
-    from betty.helpers import flatten
+
+    for k in list(priordict.keys()):
+        # e.g., 'tess_mean', 'ground_2_mean" -> <f_{\rm ground;2}>
+        if '_mean' in k:
+            kstr = k.replace('_mean','').replace('_',';')
+            latexstr = '$\langle f_\mathrm{'+ f'{kstr}' +r'} \rangle$'
+            latexparams.append(latexstr)
+
     dlatexparams = [
         r"$R_{\rm p}/R_\star$",
         r"$\rho_\star$",
