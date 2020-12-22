@@ -128,6 +128,9 @@ def plot_phasefold(m, summdf, outpath, overwrite=0, show_samples=0,
         d = _get_fitted_data_dict_allindivtransit(m, summdf)
         _d = d['tess']
 
+    else:
+        raise NotImplementedError
+
     P_orb = summdf.loc['period', 'median']
     t0_orb = summdf.loc['t0', 'median']
 

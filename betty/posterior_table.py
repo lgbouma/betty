@@ -129,9 +129,10 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
 
     print(df)
 
-    if modelid != 'simpletransit':
+    if modelid not in ['simpletransit', 'alltransit']:
         raise NotImplementedError('generalize priordict using the 0th key '
                                   'from the priordict tuple here...')
+
     pr = {
         'period': normal_str(
             mu=priordict['period'][1], sd=priordict['period'][2],
@@ -170,7 +171,7 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
 
     # round everything. requires a double transpose because df.round
     # operates column-wise
-    if modelid in ['simpletransit']:
+    if modelid in ['simpletransit', 'alltransit']:
         round_precision = [7, 7, 5, 4, 3, 3, 3, 3]
         n_rp = len(round_precision)
         for i in range(n_fitted - n_rp):
