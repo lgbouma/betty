@@ -1,15 +1,22 @@
 """
 Contents:
-    flatten: a function to flatten lists of lists.
-    retrieve_tess_lcdata: given lcfiles, get dict of data.
-    get_model_transit: given parameters, evaluate LC model.
-    _get_fitted_data_dict: get parameters, given ModelFitter object
-    _subset_cut: trim LC to transit windows
 
-    get_wasp4_lightcurve
+    flatten: a function to flatten lists of lists.
+    retrieve_tess_lcdata: given lcfiles (spoc/cdips) get dict of time/flux/err.
+
+    _subset_cut: slice/trim LC to transit windows.
+
+    get_model_transit: given parameters, evaluate LC model.
+    _get_fitted_data_dict: get params and model LCs from ModelFitter object.
+    _get_fitted_data_dict_alltransit: ditto, for "alltransit" model.
+
+    _estimate_mode: get mode of unimodal pdf given samples, via gaussian KDE.
+
+    get_wasp4_lightcurve: used for module testing.
 """
 import os, collections
 import numpy as np, pandas as pd
+from collections import OrderedDict
 
 from astropy.io import fits
 
@@ -201,11 +208,117 @@ def _get_fitted_data_dict(m, summdf):
               'r_star', 'logg_star']
 
     paramd = {k:summdf.loc[k, 'median'] for k in params}
-    y_mod_median = get_model_transit(paramd, d['x_obs'])
+    y_mod_median = get_model_transit(
+        paramd, d['x_obs'], t_exp=np.nanmedian(np.diff(d['x_obs']))
+    )
     d['y_mod'] = y_mod_median
     d['y_resid'] = d['y_obs']-y_mod_median
 
     return d, params, paramd
+
+
+def _get_fitted_data_dict_alltransit(m, summdf):
+
+    d = OrderedDict()
+
+    for name in m.data.keys():
+
+        d[name] = {}
+        d[name]['x_obs'] = m.data[name][0]
+        d[name]['y_obs'] = m.data[name][1]
+        d[name]['y_err'] = m.data[name][2]
+
+        params = ['period', 't0', 'log_r', 'b', 'u[0]', 'u[1]', 'r_star',
+                  'logg_star', f'{name}_mean']
+
+        paramd = {k : summdf.loc[k, 'median'] for k in params}
+        y_mod_median = get_model_transit(
+            paramd, d[name]['x_obs'],
+            t_exp=np.nanmedian(np.diff(d[name]['x_obs']))
+        )
+
+        d[name]['y_mod'] = y_mod_median
+        d[name]['y_resid'] = d[name]['y_obs'] - y_mod_median
+        d[name]['params'] = params
+
+    # merge all the available LC data
+    d['all'] = {}
+    _p = ['x_obs', 'y_obs', 'y_err', 'y_mod']
+    for p in _p:
+        d['all'][p] = np.hstack([d[f'{k}'][p] for k in d.keys()
+                                 if '_' in k or 'tess' in k])
+
+    return d
+
+
+def _get_fitted_data_dict_allindivtransit(m, summdf, bestfitmeans='median'):
+    """
+    args:
+        bestfitmeans: "map", "median", "mean, "mode"; depending on which you
+        think will produce the better fitting model.
+    """
+
+    d = OrderedDict()
+
+    for name in m.data.keys():
+
+        d[name] = {}
+        d[name]['x_obs'] = m.data[name][0]
+        # d[name]['y_obs'] = m.data[name][1]
+        d[name]['y_err'] = m.data[name][2]
+
+        params = ['period', 't0', 'log_r', 'b', 'u[0]', 'u[1]', 'r_star',
+                  'logg_star', f'{name}_mean', f'{name}_a1', f'{name}_a2']
+
+        _tmid = np.nanmedian(m.data[name][0])
+        t_exp = np.nanmedian(np.diff(m.data[name][0]))
+
+        if bestfitmeans == 'mode':
+            paramd = {}
+            for k in params:
+                print(name, k)
+                paramd[k] = _estimate_mode(m.trace[k])
+        elif bestfitmeans == 'median':
+            paramd = {k : summdf.loc[k, 'median'] for k in params}
+        elif bestfitmeans == 'mean':
+            paramd = {k : summdf.loc[k, 'mean'] for k in params}
+        elif bestfitmeans == 'map':
+            paramd = {k : m.map_estimate[k] for k in params}
+        else:
+            raise NotImplementedError
+
+        y_mod_median, y_mod_median_trend = (
+            get_model_transit_quad(paramd, d[name]['x_obs'], _tmid,
+                                   t_exp=t_exp, includemean=1)
+        )
+
+        # this is used for phase-folded data, with the local trend removed.
+        d[name]['y_mod'] = y_mod_median - y_mod_median_trend
+
+        # NOTE: for this case, the "residual" of the observation minus the
+        # quadratic trend is actually the "observation". this is b/c the
+        # observation includes the rotation signal.
+        d[name]['y_obs'] = m.data[name][1] - y_mod_median_trend
+
+        d[name]['params'] = params
+
+    # merge all the tess transits
+    n_tess = len([k for k in d.keys() if 'tess' in k])
+    d['tess'] = {}
+    d['all'] = {}
+    _p = ['x_obs', 'y_obs', 'y_err', 'y_mod']
+    for p in _p:
+        d['tess'][p] = np.hstack([d[f'tess_{ix}'][p] for ix in range(n_tess)])
+    for p in _p:
+        d['all'][p] = np.hstack([d[f'{k}'][p] for k in d.keys() if '_' in k])
+
+    return d
+
+
+
+
+
+
 
 
 def _subset_cut(x_obs, y_obs, y_err, n=12, t0=None, per=None, tdur=None,
@@ -317,3 +430,39 @@ def get_wasp4_lightcurve():
         flux_err[sel].astype(np.float64),
         tess_texp
     )
+
+
+def _estimate_mode(samples, N=1000):
+    """
+    Estimates the "mode" (really, maximum) of a unimodal probability
+    distribution given samples from that distribution. Do it by approximating
+    the distribution using a gaussian KDE, with an auto-tuned bandwidth that
+    uses Scott's rule of thumb.
+    <https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.gaussian_kde.html>
+
+    args:
+
+        samples: 1d numpy array of sampled values
+
+        N: number of points at which to evalute the KDE. higher improves
+        precision of the estimate.
+
+    returns:
+
+        Peak of the distribution. (Assuming it is unimodal, which should be
+        checked.)
+    """
+
+    kde = gaussian_kde(samples, bw_method='scott')
+
+    x = np.linspace(min(samples), max(samples), N)
+
+    probs = kde.evaluate(x)
+
+    peak = x[np.argmax(probs)]
+
+    return peak
+
+
+
+

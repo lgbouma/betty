@@ -18,7 +18,10 @@ from astrobase.lcmath import (
     find_lc_timegroups, phase_magseries_with_errs, time_bin_magseries
 )
 
-from betty.helpers import _get_fitted_data_dict
+from betty.helpers import (
+    _get_fitted_data_dict, _get_fitted_data_dict_alltransit,
+    _get_fitted_data_dict_allindivtransit
+)
 
 from astrobase import periodbase
 from astrobase.plotbase import skyview_stamp
@@ -118,8 +121,7 @@ def plot_phasefold(m, summdf, outpath, overwrite=0, show_samples=0,
         d, params, paramd = _get_fitted_data_dict(m, summdf)
         _d = d
 
-    elif 'simpletransit' in modelid:
-        raise NotImplementedError
+    elif 'alltransit' in modelid:
         d = _get_fitted_data_dict_alltransit(m, summdf)
         _d = d['tess']
 
