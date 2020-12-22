@@ -3,9 +3,11 @@ plot_fitindiv
 plot_phasefold
 plot_cornerplot
 plot_1d_posterior
+plot_grounddepth
 """
 import os, corner, pickle
 from datetime import datetime
+from copy import deepcopy
 from glob import glob
 import numpy as np, matplotlib.pyplot as plt, pandas as pd, pymc3 as pm
 from numpy import array as nparr
@@ -20,8 +22,9 @@ from astrobase.lcmath import (
 
 from betty.helpers import (
     _get_fitted_data_dict, _get_fitted_data_dict_alltransit,
-    _get_fitted_data_dict_allindivtransit
+    _get_fitted_data_dict_allindivtransit, get_model_transit
 )
+from cdips.utils import astropytime_to_YYYYMMDD
 
 from astrobase import periodbase
 from astrobase.plotbase import skyview_stamp
@@ -123,7 +126,7 @@ def plot_phasefold(m, summdf, outpath, overwrite=0, show_samples=0,
 
     elif 'alltransit' in modelid:
         d = _get_fitted_data_dict_alltransit(m, summdf)
-        _d = d['tess']
+        _d = d['all']  # (could be "tess" too)
 
     elif modelid in ['allindivtransit', 'tessindivtransit']:
         raise NotImplementedError
@@ -346,3 +349,197 @@ def plot_1d_posterior(samples, outpath, truth=None, xlabel=None):
     ax.set_ylabel('Posterior probability')
 
     savefig(f, outpath, writepdf=0)
+
+
+def plot_grounddepth(m, summdf, outpath, overwrite=1, modelid=None,
+                     showerror=1, talkaspect=0, groundkeytobandpass=None,
+                     tdur=2/24., xlim=None, ylim=None):
+    """
+    groundkeytobandpass (dict): e.g.,
+
+        groundkeytobandpass = {'ground_0': 'i$_\mathrm{LCOGT}$',
+                               'ground_1': 'i$_\mathrm{LCOGT}$',
+                               'ground_2': 'i$_\mathrm{LCOGT}$',
+                               'ground_3': 'g$_\mathrm{LCOGT}$',
+                               'ground_4': 'z$_\mathrm{LCOGT}$'}
+
+    xlim, ylim: optional tuples.
+    """
+
+    set_style()
+
+    if os.path.exists(outpath) and not overwrite:
+        print('found {} and no overwrite'.format(outpath))
+        return
+
+    if modelid == 'simpletransit':
+        raise NotImplementedError
+    elif 'alltransit' in modelid:
+        d = _get_fitted_data_dict_alltransit(m, summdf)
+    elif modelid in ['allindivtransit', 'tessindivtransit']:
+        raise NotImplementedError
+        d = _get_fitted_data_dict_allindivtransit(m, summdf)
+    else:
+        raise NotImplementedError
+
+    n_groundtra = len([k for k in list(d.keys()) if 'ground' in k])
+
+    t0 = summdf.T['t0'].loc['mean'] + 2457000
+    period = summdf.T['period'].loc['mean']
+
+    tra_dict = {}
+    for k in list(d.keys()):
+        if 'ground' in k:
+
+            start_time_bjdtdb = 2457000 + np.nanmin(d[k]['x_obs'])
+            med_time_bjdtdb = 2457000 + np.nanmedian(d[k]['x_obs'])
+            start_time = Time(start_time_bjdtdb, format='jd')
+
+            dstr = astropytime_to_YYYYMMDD(start_time)
+            tstr = (
+                astropytime_to_YYYYMMDD(start_time, sep='.') + ' ' +
+                groundkeytobandpass[k]
+            )
+
+            tra_dict[k] = {
+                'start_time': start_time,
+                'tra_ix': int( np.round((med_time_bjdtdb - t0)/period, 0) ),
+                'dstr': dstr,
+                'tstr': tstr
+            }
+
+    tra_df = pd.DataFrame(tra_dict).T
+
+    # plot the transits in true time order
+    tra_df = tra_df.sort_values(by='start_time')
+
+    ##########################################
+
+    plt.close('all')
+
+    if not talkaspect:
+        fig, ax = plt.subplots(figsize=(3.3,5))
+    else:
+        fig, ax = plt.subplots(figsize=(4,4))
+
+    inds = range(n_groundtra)
+
+    t0 = summdf.loc['t0', 'median']
+    per = summdf.loc['period', 'median']
+    b = summdf.loc['b', 'median']
+    epochs = np.arange(tra_df.tra_ix.min(), tra_df.tra_ix.max(), 1)
+    tra_times = t0 + per*epochs
+
+    ##########################################
+    # 2*transit depth in ppt, between each mean.
+    delta_y = 2 * 1e3 * (np.exp(summdf.loc['log_r', 'median']))**2
+    shift = 0
+    for ind, r in tra_df.iterrows():
+
+        tra_ix = r['tra_ix']
+        tstr = r['tstr']
+        dstr = r['dstr']
+        name = r.name
+
+        ##########################################
+        # get quantities to be plotted
+
+        gtime = d[ind]['x_obs']
+        gflux = d[ind]['y_obs']
+        gflux_err = d[ind]['y_err']
+
+        gmodtime = np.linspace(np.nanmin(gtime)-1, np.nanmax(gtime)+1, int(1e4))
+
+        params = d[ind]['params']
+        paramd = {k:summdf.loc[k, 'median'] for k in params}
+
+        if modelid not in ['alltransit_quad', 'allindivtransit']:
+            # model is for the cadence of the observation, not of the model.
+            gmodflux = get_model_transit(
+                paramd, gmodtime, t_exp=np.nanmedian(np.diff(gtime))
+            )
+        else:
+            raise NotImplementedError('verify the below works')
+            _tmid = np.nanmedian(gtime)
+            gmodflux, gmodtrend = (
+                get_model_transit_quad(paramd, gmodtime, _tmid)
+            )
+            gmodflux -= gmodtrend
+
+            # remove the trends before plotting
+            _, gtrend = get_model_transit_quad(paramd, gtime, _tmid)
+            gflux -= gtrend
+
+        # bin too, by a factor of 3 in whatever the sampling rate is
+        bintime = 3*np.nanmedian(np.diff(gtime))*24*60*60
+        bd = time_bin_magseries(gtime, gflux, binsize=bintime, minbinelems=2)
+        gbintime, gbinflux = bd['binnedtimes'], bd['binnedmags']
+
+        mid_time = t0 + per*tra_ix
+        tdur = tdur # roughly, in units of days
+        n = 1.55 # sets window width
+        start_time = mid_time - n*tdur
+        end_time = mid_time + n*tdur
+
+        s = (gtime > start_time) & (gtime < end_time)
+        bs = (gbintime > start_time) & (gbintime < end_time)
+        gs = (gmodtime > start_time) & (gmodtime < end_time)
+
+        ax.scatter((gtime[s]-mid_time)*24,
+                   (gflux[s] - np.max(gmodflux[gs]))*1e3 - shift,
+                   c='darkgray', zorder=3, s=7, rasterized=False,
+                   linewidths=0, alpha=0.5)
+
+        ax.scatter((gbintime[bs]-mid_time)*24,
+                   (gbinflux[bs] - np.max(gmodflux[gs]))*1e3 - shift,
+                   c='black', zorder=4, s=18, rasterized=False,
+                   linewidths=0)
+
+        if modelid in ['alltransit']:
+            l0 = (
+                'All-transit fit'
+            )
+
+        ax.plot((gmodtime[gs]-mid_time)*24,
+                (gmodflux[gs] - np.max(gmodflux[gs]))*1e3 - shift,
+                color='gray', alpha=0.8, rasterized=False, lw=1, zorder=1,
+                label=l0)
+
+        props = dict(boxstyle='square', facecolor='white', alpha=0.7, pad=0.15,
+                     linewidth=0)
+        ax.text(np.nanpercentile(24*(gmodtime[gs]-mid_time), 97), 2.5 - shift,
+                tstr, ha='right', va='bottom', bbox=props, zorder=6,
+                fontsize='x-small')
+
+        if showerror:
+            raise NotImplementedError('below is deprecated, and from TOI837')
+            _e = 1e3*np.median(gflux_err)
+
+            # bin to roughly 5e-4 * 8.3 * 24 * 60 ~= 6 minute intervals
+            sampletime = np.nanmedian(np.diff(gtime))*24*60*60 # seconds
+            errorfactor = (sampletime/bintime)**(1/2)
+
+            ax.errorbar(
+                -2.35, -7 - shift, yerr=errorfactor*_e,
+                fmt='none', ecolor='black', alpha=1, elinewidth=1, capsize=2,
+            )
+
+            print(f'{_e:.2f}, {errorfactor*_e:.2f}')
+
+        shift += delta_y
+
+    if isinstance(ylim, tuple):
+        ax.set_ylim(ylim)
+
+    if isinstance(xlim, tuple):
+        ax.set_xlim(xlim)
+
+    format_ax(ax)
+
+    fig.text(0.5,-0.01, 'Hours from mid-transit', ha='center',
+             fontsize='medium')
+    fig.text(-0.02,0.5, 'Relative flux [ppt]', va='center',
+             rotation=90, fontsize='medium')
+
+    fig.tight_layout(h_pad=0.2, w_pad=0.2)
+    savefig(fig, outpath, writepdf=1, dpi=300)
