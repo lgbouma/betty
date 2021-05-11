@@ -7,7 +7,9 @@ ModelFitter
     run_alltransit_inference
     run_allindivtransit_inference
 """
-import numpy as np, matplotlib.pyplot as plt, pandas as pd, pymc3 as pm
+import numpy as np, matplotlib.pyplot as plt, pandas as pd
+import pymc3 as pm
+import pymc3_ext as pmx
 import pickle, os
 from astropy import units as units, constants as const
 from numpy import array as nparr
@@ -15,8 +17,8 @@ from functools import partial
 from collections import OrderedDict
 
 import exoplanet as xo
-from exoplanet.gp import terms, GP
-import theano.tensor as tt
+from celerite2.theano import terms, GaussianProcess
+import aesara_theano_fallback.tensor as tt
 
 from betty.constants import factor
 
