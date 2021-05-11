@@ -1,6 +1,11 @@
 """
 ModelParser
 ModelFitter
+    run_transit_inference
+    run_rvorbit_inference
+    run_rvspotorbit_inference
+    run_alltransit_inference
+    run_allindivtransit_inference
 """
 import numpy as np, matplotlib.pyplot as plt, pandas as pd, pymc3 as pm
 import pickle, os
