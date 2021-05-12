@@ -7,6 +7,9 @@ ModelFitter
     run_alltransit_inference
     run_allindivtransit_inference
 """
+import logging
+logging.getLogger("filelock").setLevel(logging.ERROR)
+
 import numpy as np, matplotlib.pyplot as plt, pandas as pd
 import pymc3 as pm
 import pymc3_ext as pmx
@@ -92,9 +95,11 @@ class ModelFitter(ModelParser):
         make_threadsafe = False
 
         if modelid == 'simpletransit':
+            print(f'Beginning run_transit_inference for {modelid}...')
             self.run_transit_inference(
                 pklpath, make_threadsafe=make_threadsafe
             )
+            print(f'Finished run_transit_inference for {modelid}...')
 
         elif modelid == 'rvorbit':
             self.run_rvorbit_inference(
@@ -304,12 +309,14 @@ class ModelFitter(ModelParser):
                 print(map_estimate)
                 pass
 
+            print('Got MAP estimate. Beginning sampling...')
             # sample from the posterior defined by this model.
-            trace = pm.sample(
+            trace = pmx.sample(
                 tune=self.N_samples, draws=self.N_samples,
                 start=map_estimate, cores=self.N_cores,
                 chains=self.N_chains,
-                step=xo.get_dense_nuts_step(target_accept=0.8),
+                return_inferencedata=True,
+                target_accept=0.95
             )
 
         with open(pklpath, 'wb') as buff:
@@ -624,11 +631,11 @@ class ModelFitter(ModelParser):
                 pass
 
             # sample from the posterior defined by this model.
-            trace = pm.sample(
+            trace = pmx.sample(
                 tune=self.N_samples, draws=self.N_samples,
                 start=map_estimate, cores=self.N_cores,
                 chains=self.N_chains,
-                step=xo.get_dense_nuts_step(target_accept=0.8),
+                target_accept=0.95
             )
 
         with open(pklpath, 'wb') as buff:
@@ -789,7 +796,7 @@ class ModelFitter(ModelParser):
                 tune=self.N_samples, draws=self.N_samples,
                 start=map_estimate, cores=self.N_cores,
                 chains=self.N_chains,
-                step=xo.get_dense_nuts_step(target_accept=0.8),
+                target_accept=0.95,
             )
 
         savevars = ['t0', 'period', 'b', 'minerva_mean', 'P_rot', 'log_deltaQ',

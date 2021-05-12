@@ -35,6 +35,7 @@ from astropy.io import fits
 from astropy.time import Time
 
 import matplotlib.transforms as transforms
+import arviz as az
 
 def plot_fitindiv(m, summdf, outpath, overwrite=1, modelid=None):
     """
@@ -315,14 +316,33 @@ def plot_cornerplot(var_names, m, outpath, overwrite=1):
 
     # corner plot of posterior samples
     plt.close('all')
-    if isinstance(m.trace, dict):
-        trace_df = pd.DataFrame(m.trace)
+
+    from corner import __version__
+
+    if float(__version__[:3]) < 2.2:
+
+        if isinstance(m.trace, dict):
+            trace_df = pd.DataFrame(m.trace)
+        elif isinstance(m.trace, az.data.inference_data.InferenceData):
+            trace_df = m.trace.posterior.to_dataframe()
+        else:
+            trace_df = pm.trace_to_dataframe(m.trace, varnames=var_names)
+        fig = corner.corner(trace_df, quantiles=[0.16, 0.5, 0.84],
+                            show_titles=True, title_kwargs={"fontsize": 12},
+                            title_fmt='.2g')
+        savefig(fig, outpath, writepdf=0, dpi=100)
+
     else:
-        trace_df = pm.trace_to_dataframe(m.trace, varnames=var_names)
-    fig = corner.corner(trace_df, quantiles=[0.16, 0.5, 0.84],
-                        show_titles=True, title_kwargs={"fontsize": 12},
-                        title_fmt='.2g')
-    savefig(fig, outpath, writepdf=0, dpi=100)
+
+        assert isinstance(m.trace, az.data.inference_data.InferenceData)
+
+        fig = corner.corner(
+            m.trace.posterior[var_names], quantiles=[0.16, 0.5, 0.84],
+            show_titles=True, title_kwargs={"fontsize": 12}, title_fmt='.2g',
+            divergences=True
+        )
+        savefig(fig, outpath, writepdf=0, dpi=100)
+
 
 
 def plot_1d_posterior(samples, outpath, truth=None, xlabel=None):

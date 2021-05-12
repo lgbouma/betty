@@ -74,7 +74,7 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
 
     summarypath = outpath.replace('.tex', '_raw.csv')
 
-    scols = ['median', 'mean', 'sd', 'hpd_3%', 'hpd_97%', 'ess_mean',
+    scols = ['median', 'mean', 'sd', 'hdi_3%', 'hdi_97%', 'ess_bulk',
              'r_hat_minus1']
 
     if os.path.exists(summarypath) and not overwrite:
@@ -221,8 +221,8 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
     df['units'] = list(ud.values())
 
     df = df[
-        ['units', 'priors', 'median', 'mean', 'sd', 'hpd_3%', 'hpd_97%',
-         'ess_mean', 'r_hat_minus1']
+        ['units', 'priors', 'median', 'mean', 'sd', 'hdi_3%', 'hdi_97%',
+         'ess_bulk', 'r_hat_minus1']
     ]
 
     latexparams = [
