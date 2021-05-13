@@ -550,7 +550,7 @@ class ModelFitter(ModelParser):
                 gp = GaussianProcess(
                     kernel,
                     t=x[mask],
-                    diag=yerr[mask] ** 2 + tt.exp(2 * log_jitter),
+                    diag=yerr[mask]**2 + tt.exp(2 * log_jitter),
                     mean=mean,
                     quiet=True,
                 )
@@ -657,30 +657,58 @@ class ModelFitter(ModelParser):
                 # (`pmx.optimize(start=start)`) did not work very well; a few
                 # other combinations of parameters did not work very well
                 # either. Using the plotting diagnostics below helped this.
+
+                # NOTE: Method 1: don't do full optimization.
+                np.random.seed(42)
                 if start is None:
                     start = model.test_point
-                map_soln = pmx.optimize(
-                    start=start,
-                    vars=[sigma, rho, sigma_rot, mean, log_Q0, log_dQ]
-                )
+
+                map_soln = start
+
+                # # RotationTerm: sigma_rot, prot, log_Q0, log_dQ, f
+                # # NOTE: all five no bueno. NOTE: sigma_rot, f, prot seems OK.
+                # map_soln = pmx.optimize(
+                #     start=map_soln,
+                #     vars=[sigma_rot, f, prot]
+                # )
+
+                # # SHO term: sigma, rho. Describes non-periodic variability.
+                # map_soln = pmx.optimize(
+                #     start=start,
+                #     vars=[sigma, rho]
+                # )
+
+                # Transit: [log_r, b, t0, period, r_star, logg_star, ecs, 
+                # u1]...]
                 map_soln = pmx.optimize(
                     start=map_soln,
-                    vars=[period, t0, log_r, b, log_jitter]
+                    vars=[log_r, b, ecc, omega, t0, period, r_star, logg_star]
                 )
-                #map_soln = pmx.optimize(
-                #    start=map_soln,
-                #    vars=[period, t0]
-                #)
-                ##RV optimizers
-                #map_soln = pmx.optimize(
-                #    start=map_soln,
-                #    vars=[log_sigma_lc, log_sigma_gp]
-                #)
-                #map_soln = pmx.optimize(start=map_soln, vars=[log_rho_gp])
-                #map_soln = pmx.optimize(start=map_soln)
 
-                # # Method #2:
-                # map_soln = pmx.optimize(start=start)
+
+                # All GP terms + jitter and mean.
+                map_soln = pmx.optimize(
+                    start=map_soln,
+                    vars=[sigma_rot, prot, log_Q0, log_dQ, f, sigma, rho,
+                          log_jitter, mean]
+                )
+
+                # # Limb-darkening
+                # map_soln = pmx.optimize(
+                #     start=map_soln,
+                #     vars=[u0, u1]
+                # )
+
+
+                # # Jitter and mean:
+                # map_soln = pmx.optimize(
+                #     start=map_soln,
+                #     vars=[log_jitter, mean]
+                # )
+
+                # # Full optimization
+                map_soln = pmx.optimize(start=map_soln)
+
 
             return model, map_soln
 
