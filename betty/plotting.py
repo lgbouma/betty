@@ -1,15 +1,21 @@
 """
-plot_fitindiv
-plot_phasefold
-plot_cornerplot
-plot_1d_posterior
-plot_grounddepth
+Post-fit plots:
+    plot_fitindiv
+    plot_phasefold
+    plot_cornerplot
+    plot_1d_posterior
+    plot_grounddepth
+
+MAP plots:
+    plot_light_curve
+    plot_phased_light_curve
 """
 import os, corner, pickle
 from datetime import datetime
 from copy import deepcopy
 from glob import glob
 import numpy as np, matplotlib.pyplot as plt, pandas as pd, pymc3 as pm
+import matplotlib as mpl
 from numpy import array as nparr
 
 from aesthetic.plot import savefig, format_ax
@@ -563,3 +569,147 @@ def plot_grounddepth(m, summdf, outpath, overwrite=1, modelid=None,
 
     fig.tight_layout(h_pad=0.2, w_pad=0.2)
     savefig(fig, outpath, writepdf=1, dpi=300)
+
+
+def plot_light_curve(data, soln, outpath, mask=None):
+
+    assert len(data.keys()) == 1
+    name = list(data.keys())[0]
+    x,y,yerr,texp = data[name]
+    if mask is None:
+        mask = np.ones(len(x), dtype=bool)
+
+    plt.close('all')
+    set_style()
+    fig, axes = plt.subplots(4, 1, figsize=(10, 10), sharex=True)
+
+    ax = axes[0]
+
+    if len(x[mask]) > int(2e4):
+        # see https://github.com/matplotlib/matplotlib/issues/5907
+        mpl.rcParams['agg.path.chunksize'] = 10000
+
+    ax.scatter(x[mask], y[mask], c="k", s=0.5, rasterized=True,
+               label="data", linewidths=0, zorder=42)
+    gp_mod = soln["gp_pred"] + soln["mean"]
+    ax.plot(x[mask], gp_mod, color="C2", label="MAP gp model",
+            zorder=41, lw=0.5)
+    ax.legend(fontsize=10)
+    ax.set_ylabel("$f$")
+
+    ax = axes[1]
+    ax.plot(x[mask], y[mask] - gp_mod, "k", label="data - MAPgp")
+    for i, l in enumerate("b"):
+        mod = soln["light_curves"][:, i]
+        ax.plot(x[mask], mod, label="planet {0}".format(l))
+    ax.legend(fontsize=10, loc=3)
+    ax.set_ylabel("$f_\mathrm{dtr}$")
+
+    ax = axes[2]
+    ax.plot(x[mask], y[mask] - gp_mod, "k", label="data - MAPgp")
+    for i, l in enumerate("b"):
+        mod = soln["light_curves"][:, i]
+        ax.plot(x[mask], mod, label="planet {0}".format(l))
+    ax.legend(fontsize=10, loc=3)
+    ax.set_ylabel("$f_\mathrm{dtr}$ [zoom]")
+    ymin = np.min(mod)-0.05*abs(np.min(mod))
+    ymax = abs(ymin)
+    ax.set_ylim([ymin, ymax])
+
+    ax = axes[3]
+    mod = gp_mod + np.sum(soln["light_curves"], axis=-1)
+    ax.plot(x[mask], y[mask] - mod, "k")
+    ax.axhline(0, color="#aaaaaa", lw=1)
+    ax.set_ylabel("residuals")
+    ax.set_xlim(x[mask].min(), x[mask].max())
+    ax.set_xlabel("time [days]")
+
+    fig.tight_layout()
+
+    savefig(fig, outpath, dpi=350)
+
+
+def plot_phased_light_curve(data, soln, outpath, mask=None, from_trace=False):
+    assert len(data.keys()) == 1
+    name = list(data.keys())[0]
+    x,y,yerr,texp = data[name]
+
+    if mask is None:
+        mask = np.ones(len(x), dtype=bool)
+
+    fig, axes = plt.subplots(2, 1, figsize=(5, 4.5), sharex=True)
+
+    if from_trace==True:
+        _t0 = np.median(soln["t0"])
+        _per = np.median(soln["period"])
+        gp_mod = (
+            np.median(soln["gp_pred"], axis=0) +
+            np.median(soln["mean"], axis=0)
+        )
+        lc_mod = (
+            np.median(np.sum(soln["light_curves"], axis=-1), axis=0)
+        )
+        lc_mod_band = (
+            np.percentile(np.sum(soln["light_curves"], axis=-1),
+                          [16.,84.], axis=0)
+        )
+        _yerr = (
+            np.sqrt(yerr[mask] ** 2 +
+                    np.exp(2 * np.median(soln["log_jitter"], axis=0)))
+        )
+
+    elif from_trace==False:
+        _t0 = soln["t0"]
+        _per = soln["period"]
+        gp_mod = soln["gp_pred"] + soln["mean"]
+        lc_mod = soln["light_curves"][:, 0]
+        _yerr = (
+            np.sqrt(yerr[mask] ** 2 + np.exp(2 * soln["log_jitter"]))
+        )
+
+    x_fold = (x - _t0 + 0.5 * _per) % _per - 0.5 * _per
+
+    ax = axes[0]
+
+    #For plotting
+    lc_modx = x_fold[mask]
+    lc_mody = lc_mod[np.argsort(lc_modx)]
+    if from_trace==True:
+        lc_mod_lo = lc_mod_band[0][np.argsort(lc_modx)]
+        lc_mod_hi = lc_mod_band[1][np.argsort(lc_modx)]
+    lc_modx = np.sort(lc_modx)
+
+    if len(x_fold[mask]) > int(2e4):
+        # see https://github.com/matplotlib/matplotlib/issues/5907
+        mpl.rcParams['agg.path.chunksize'] = 10000
+
+    ax.errorbar(24*x_fold[mask], y[mask]-gp_mod, yerr=_yerr,  fmt=".",
+                color="k", label="data", alpha=0.3)
+
+    ax.plot(24*lc_modx, lc_mody, color="C2", label="transit model",
+            zorder=99)
+
+    if from_trace==True:
+        art = ax.fill_between(
+            lc_modx, lc_mod_lo, lc_mod_hi, color="C2", alpha=0.5,
+            zorder=1000
+        )
+        # NOTE: this will raise an error...
+        ert.set_edgecolor("none")
+
+    ax.legend(fontsize=10)
+    ax.set_ylabel("relative flux")
+    ax.set_xlim(-0.5*24,0.5*24)
+
+    ax = axes[1]
+    ax.errorbar(24*x_fold[mask], y[mask] - gp_mod - lc_mod, yerr=_yerr,
+                fmt=".", color="k", label="data - GP - transit", alpha=0.3)
+    ax.legend(fontsize=10, loc=3)
+    ax.set_xlabel("time from mid-transit [hours]")
+    ax.set_ylabel("de-trended flux")
+    ax.set_xlim(-0.5*24,0.5*24)
+
+    fig.tight_layout()
+
+    savefig(fig, outpath, dpi=350)
+    plt.close('all')
