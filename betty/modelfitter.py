@@ -27,7 +27,6 @@ from celerite2.theano import terms, GaussianProcess
 import aesara_theano_fallback.tensor as tt
 
 from betty.constants import factor
-from betty import plotting as bp
 
 class ModelParser:
 
@@ -343,9 +342,8 @@ class ModelFitter(ModelParser):
 
     def run_gptransit_inference(self, pklpath, make_threadsafe=True):
         """
-        Fit transit data for an Agol+19 transit, + a GP for the stellar
-        variability, simultaneously.  (Ignores any stellar variability;
-        believes error bars).  Assumes single instrument, for now...
+        Fit light curve for an Agol+19 transit, + a GP for the stellar
+        variability, simultaneously.  Assumes single instrument.
 
         Fits for:
 
@@ -696,21 +694,21 @@ class ModelFitter(ModelParser):
             print(map_estimate)
             pass
 
+        from betty import plotting as bp
+
         outpath = os.path.join(self.PLOTDIR, 'flux_vs_time_map_estimate.png')
         bp.plot_light_curve(self.data, map_estimate, outpath)
 
         outpath = os.path.join(self.PLOTDIR, 'flux_vs_phase_map_estimate.png')
         bp.plot_phased_light_curve(self.data, map_estimate, outpath)
 
-
-        #FIXME TODO look at phase-fold of the map_estimate
-
-        #FIXME TODO SOME OF DAN'S TUTORIALS DO SIGMA CLIPPING AT THIS POINT 
-        import IPython; IPython.embed()
-        assert 0
-
         print('Got MAP estimate. Beginning sampling...')
         # sample from the posterior defined by this model.
+
+        #
+        # NOTE: some of Dan's tutorials do sigma-clipping at this point. If the
+        # MAP estimate looks good enough... no need!
+        #
 
         with model:
             trace = pmx.sample(
