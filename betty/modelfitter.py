@@ -378,8 +378,8 @@ class ModelFitter(ModelParser):
 
                 # Shared parameters
                 mean = pm.Normal(
-                    "mean", mu=p[f'{name}_mean'][1], sd=p[f'{name}_mean'][2],
-                    testval=p[f'{name}_mean'][1]
+                    "mean", mu=p[f'mean'][1], sd=p[f'mean'][2],
+                    testval=p[f'mean'][1]
                 )
 
                 # Stellar parameters.
@@ -531,15 +531,19 @@ class ModelFitter(ModelParser):
                 sigma_rot = pm.InverseGamma(
                     "sigma_rot", **pmx.estimate_inverse_gamma_parameters(1.0, 5.0)
                 )
-                log_prot = pm.Normal("log_prot", mu=np.log(p['prot'][1]),
-                                     sd=p['prot'][2])
+                log_prot = pm.Normal("log_prot", mu=p['log_prot'][1],
+                                     sd=p['log_prot'][2])
                 prot = pm.Deterministic("prot", tt.exp(log_prot))
                 log_Q0 = pm.Normal("log_Q0", mu=0.0, sd=2.0)
                 log_dQ = pm.Normal("log_dQ", mu=0.0, sd=2.0)
                 f = pm.Uniform("f", lower=0.1, upper=1.0)
 
-                # Set up the Gaussian Process model
+                # Set up the Gaussian Process model. See
+                # https://celerite2.readthedocs.io/en/latest/tutorials/first/
+                # for intro.
+                # Non-periodic term
                 kernel = terms.SHOTerm(sigma=sigma, rho=rho, Q=1/3.0)
+                # Quasiperiodic term
                 kernel += terms.RotationTerm(
                     sigma=sigma_rot,
                     period=prot,
