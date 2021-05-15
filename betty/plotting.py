@@ -629,7 +629,11 @@ def plot_light_curve(data, soln, outpath, mask=None):
     savefig(fig, outpath, dpi=350)
 
 
-def plot_phased_light_curve(data, soln, outpath, mask=None, from_trace=False):
+def plot_phased_light_curve(
+    data, soln, outpath, mask=None, from_trace=False,
+    ylimd=None, alpha=0.3
+):
+
     assert len(data.keys()) == 1
     name = list(data.keys())[0]
     x,y,yerr,texp = data[name]
@@ -637,25 +641,60 @@ def plot_phased_light_curve(data, soln, outpath, mask=None, from_trace=False):
     if mask is None:
         mask = np.ones(len(x), dtype=bool)
 
-    fig, axes = plt.subplots(2, 1, figsize=(5, 4.5), sharex=True)
+    plt.close('all')
+    set_style()
+    fig = plt.figure(figsize=(4,3))
+    axd = fig.subplot_mosaic(
+        """
+        A
+        B
+        """,
+        gridspec_kw={
+            "height_ratios": [3,1]
+        }
+    )
+
+    doublemedian = (
+        lambda x:
+        np.median(np.median(x, axis=0), axis=0)
+    )
+    # flatten/merge cores and chains. then percentile over both.
+    doublepctile = (
+        lambda x:
+            np.percentile(
+                np.reshape(
+                    np.array(x), (x.shape[0]*x.shape[1], x.shape[2])
+                ), [16,84],
+            axis=0)
+    )
 
     if from_trace==True:
         _t0 = np.median(soln["t0"])
         _per = np.median(soln["period"])
+
+        if len(soln["gp_pred"].shape)==3:
+            # (4, 500, 46055), ncores X nchains X time
+            medfunc = doublemedian
+            pctfunc = doublepctile
+        elif len(soln["gp_pred"].shape)==2:
+            medfunc = lambda x: np.median(x, axis=0)
+            pctfunc = lambda x: np.percentile(x, [16,84], axis=0)
+        else:
+            raise NotImplementedError
         gp_mod = (
-            np.median(soln["gp_pred"], axis=0) +
-            np.median(soln["mean"], axis=0)
+            medfunc(soln["gp_pred"]) +
+            medfunc(soln["mean"])
         )
         lc_mod = (
-            np.median(np.sum(soln["light_curves"], axis=-1), axis=0)
+            medfunc(np.sum(soln["light_curves"], axis=-1))
         )
         lc_mod_band = (
-            np.percentile(np.sum(soln["light_curves"], axis=-1),
-                          [16.,84.], axis=0)
+            pctfunc(np.sum(soln["light_curves"], axis=-1))
         )
+
         _yerr = (
             np.sqrt(yerr[mask] ** 2 +
-                    np.exp(2 * np.median(soln["log_jitter"], axis=0)))
+                    np.exp(2 * medfunc(soln["log_jitter"])))
         )
 
     elif from_trace==False:
@@ -669,7 +708,7 @@ def plot_phased_light_curve(data, soln, outpath, mask=None, from_trace=False):
 
     x_fold = (x - _t0 + 0.5 * _per) % _per - 0.5 * _per
 
-    ax = axes[0]
+    ax = axd['A']
 
     #For plotting
     lc_modx = x_fold[mask]
@@ -683,31 +722,35 @@ def plot_phased_light_curve(data, soln, outpath, mask=None, from_trace=False):
         # see https://github.com/matplotlib/matplotlib/issues/5907
         mpl.rcParams['agg.path.chunksize'] = 10000
 
-    ax.errorbar(24*x_fold[mask], y[mask]-gp_mod, yerr=_yerr,  fmt=".",
-                color="k", label="data", alpha=0.3)
+    ax.errorbar(24*x_fold[mask], 1e3*(y[mask]-gp_mod), yerr=1e3*_yerr,
+                color="k", label="data", alpha=alpha, fmt='.', elinewidth=1,
+                capsize=0, markersize=1, rasterized=True)
 
-    ax.plot(24*lc_modx, lc_mody, color="C2", label="transit model",
-            zorder=99)
+    ax.plot(24*lc_modx, 1e3*lc_mody, color="C4", label="transit model",
+            lw=1, zorder=1001, alpha=1)
 
     if from_trace==True:
         art = ax.fill_between(
-            lc_modx, lc_mod_lo, lc_mod_hi, color="C2", alpha=0.5,
+            24*lc_modx, 1e3*lc_mod_lo, 1e3*lc_mod_hi, color="C4", alpha=0.5,
             zorder=1000
         )
-        # NOTE: this will raise an error...
-        ert.set_edgecolor("none")
+        art.set_edgecolor("none")
 
-    ax.legend(fontsize=10)
-    ax.set_ylabel("relative flux")
-    ax.set_xlim(-0.5*24,0.5*24)
+    ax.set_ylabel("Relative flux [ppt]")
+    ax.set_xticklabels([])
 
-    ax = axes[1]
-    ax.errorbar(24*x_fold[mask], y[mask] - gp_mod - lc_mod, yerr=_yerr,
-                fmt=".", color="k", label="data - GP - transit", alpha=0.3)
-    ax.legend(fontsize=10, loc=3)
-    ax.set_xlabel("time from mid-transit [hours]")
-    ax.set_ylabel("de-trended flux")
-    ax.set_xlim(-0.5*24,0.5*24)
+    ax = axd['B']
+    ax.errorbar(24*x_fold[mask], 1e3*(y[mask] - gp_mod - lc_mod), yerr=1e3*_yerr,
+                color="k", alpha=alpha, fmt='.', elinewidth=1, capsize=0,
+                markersize=1, rasterized=True)
+    ax.set_xlabel("Hours from mid-transit")
+    ax.set_ylabel("Residual")
+
+    for k,a in axd.items():
+        a.set_xlim(-0.4*24,0.4*24)
+        if isinstance(ylimd, dict):
+            a.set_ylim(ylimd[k])
+        format_ax(a)
 
     fig.tight_layout()
 
