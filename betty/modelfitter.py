@@ -396,17 +396,19 @@ class ModelFitter(ModelParser):
 
                 # limb-darkening. adopt uniform, rather than Kipping 2013 -- i.e., take
                 # an "informed prior" approach.
-                u0 = pm.Uniform(
-                    'u[0]', lower=p['u[0]'][1],
-                    upper=p['u[0]'][2],
-                    testval=p['u[0]'][3]
-                )
-                u1 = pm.Uniform(
-                    'u[1]', lower=p['u[1]'][1],
-                    upper=p['u[1]'][2],
-                    testval=p['u[1]'][3]
-                )
-                u = [u0, u1]
+                u_star = xo.QuadLimbDark("u_star")
+
+                #u0 = pm.Uniform(
+                #    'u[0]', lower=p['u[0]'][1],
+                #    upper=p['u[0]'][2],
+                #    testval=p['u[0]'][3]
+                #)
+                #u1 = pm.Uniform(
+                #    'u[1]', lower=p['u[1]'][1],
+                #    upper=p['u[1]'][2],
+                #    testval=p['u[1]'][3]
+                #)
+                #u_star = [u0, u1]
 
                 # fix Rp/Rs across bandpasses
                 if p['log_r'][0] == 'Uniform':
@@ -480,7 +482,7 @@ class ModelFitter(ModelParser):
                     omega=omega
                 )
 
-                star = xo.LimbDarkLightCurve(u)
+                star = xo.LimbDarkLightCurve(u_star)
 
                 # NOTE: could loop over instruments here... (e.g., TESS, keplerllc,
                 # keplersc, ground-based instruments...). Instead, opt for simpler
@@ -517,26 +519,50 @@ class ModelFitter(ModelParser):
 
                 # A jitter term describing excess white noise
                 log_jitter = pm.Normal("log_jitter", mu=np.log(np.mean(yerr)),
-                                       sd=2.0)
+                                       sd=p['log_jitter'][2])
 
                 #A term to describe the non-periodic variability
                 sigma = pm.InverseGamma(
-                    "sigma", **pmx.estimate_inverse_gamma_parameters(1.0, 5.0)
+                    "sigma",
+                    **pmx.estimate_inverse_gamma_parameters(
+                        p['sigma'][1], p['sigma'][2]
+                    )
                 )
-                rho = pm.InverseGamma(
-                    "rho", **pmx.estimate_inverse_gamma_parameters(0.5, 2.0)
-                )
+
+                # NOTE: default recommended by DFM is InvGamma(0.5, 2). But in
+                # our model of [non-periodic SHO term] X [periodic SHO terms at
+                # Prot and 0.5*Prot] this can produce tension against the
+                # RotationTerm, leading to overfitting -- preferring to explain
+                # the transits away as noise rather than signal. So, take a
+                # uniform prior, U[1,10].  This roughly corresponds to the
+                # "stochastically-driven, damped harmonic oscillator" in the
+                # non-period SHO term
+
+                rho = pm.Uniform("rho", lower=p['rho'][1], upper=p['rho'][2])
+                #rho = pm.InverseGamma(
+                #    "rho", **pmx.estimate_inverse_gamma_parameters(
+                #        p['rho'][1], p['rho'][2]
+                #    )
+                #)
 
                 # The parameters of the RotationTerm kernel
                 sigma_rot = pm.InverseGamma(
-                    "sigma_rot", **pmx.estimate_inverse_gamma_parameters(1.0, 5.0)
+                    "sigma_rot", **pmx.estimate_inverse_gamma_parameters(
+                        p['sigma_rot'][1], p['sigma_rot'][2]
+                    )
                 )
                 log_prot = pm.Normal("log_prot", mu=p['log_prot'][1],
                                      sd=p['log_prot'][2])
                 prot = pm.Deterministic("prot", tt.exp(log_prot))
-                log_Q0 = pm.Normal("log_Q0", mu=0.0, sd=2.0)
-                log_dQ = pm.Normal("log_dQ", mu=0.0, sd=2.0)
-                f = pm.Uniform("f", lower=0.1, upper=1.0)
+                log_Q0 = pm.Normal(
+                    "log_Q0", mu=p['log_Q0'][1], sd=p['log_Q0'][2]
+                )
+                log_dQ = pm.Normal(
+                    "log_dQ", mu=p['log_dQ'][1], sd=p['log_dQ'][2]
+                )
+                f = pm.Uniform(
+                    "f", lower=p['f'][1], upper=p['f'][2]
+                )
 
                 # Set up the Gaussian Process model. See
                 # https://celerite2.readthedocs.io/en/latest/tutorials/first/
@@ -682,11 +708,12 @@ class ModelFitter(ModelParser):
                 #     vars=[sigma, rho]
                 # )
 
-                # Transit: [log_r, b, t0, period, r_star, logg_star, ecs, 
-                # u1]...]
+                # Transit: [log_r, b, t0, period, r_star, logg_star, ecs,
+                # u_star]...]
                 map_soln = pmx.optimize(
                     start=map_soln,
-                    vars=[log_r, b, ecc, omega, t0, period, r_star, logg_star]
+                    vars=[log_r, b, ecc, omega, t0, period, r_star, logg_star,
+                          u_star]
                 )
 
 
@@ -696,6 +723,14 @@ class ModelFitter(ModelParser):
                     vars=[sigma_rot, prot, log_Q0, log_dQ, f, sigma, rho,
                           log_jitter, mean]
                 )
+
+
+                ## bonus
+                #map_soln = pmx.optimize(
+                #    start=map_soln,
+                #    vars=[log_r, b, log_Q0, log_dQ]
+                #)
+
 
                 # # Limb-darkening
                 # map_soln = pmx.optimize(
