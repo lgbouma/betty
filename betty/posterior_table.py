@@ -125,16 +125,29 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
         outdf.to_csv(summarypath, index=True)
         print(f'Wrote {summarypath}')
 
-    # cleaning step...
+    # cleaning step: pm.summary produces a few parameters with indices that end
+    # with [0] even with they should be singletons
+    cleanstrs = [
+        'ecc[0]', 'omega[0]', 'cosi[0]', 'sini[0]', 'T_14[0]', 'T_13[0]'
+    ]
     newindex = []
     for i in df.index:
-        if i!='u[0]':
+        if i in cleanstrs:
             newindex.append(i.replace('[0]',''))
         else:
             newindex.append(i)
     df.index = newindex
 
-    fitted_params = list(priordict.keys())
+    # make list of fitted parameters.  Kipping2013 "u_star" parameter gets
+    # replaced with "u_star[0]" and "u_star[1]".
+    _fitted_params = list(priordict.keys())
+    fitted_params = []
+    for f in _fitted_params:
+        if 'u_star' in f:
+            fitted_params.append('u_star[0]')
+            fitted_params.append('u_star[1]')
+        else:
+            fitted_params.append(f)
 
     n_fitted = len(fitted_params)
 
@@ -163,6 +176,7 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
         'TruncatedNormal': truncnormal_str,
         'ImpactParameter': r'$\mathcal{U}(0; 1+R_{\mathrm{p}}/R_\star)$',
         'EccentricityVanEylen19': '\citet{vaneylen19}',
+        'QuadLimbDark': '\citet{exoplanet:kipping13}',
     }
 
     # fmtstring, precision, unit, latexrepr
@@ -171,6 +185,8 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
         't0':('({:.5f}; {:.5f})', 7, 'd', r"$t_0^{(1)}$"),
         'log_r':('({:.3f}; {:.3f})', 5, '--', r"$\log R_{\rm p}/R_\star$"),
         'b':(None, 4, '--', '$b$'),
+        'u_star[0]':(None, 3, '--', "$u_1$"),
+        'u_star[1]':(None, 3, '--', "$u_2$"),
         'u[0]':('({:.3f}; {:.3f})', 3, '--', "$u_1$"),
         'u[1]':('({:.3f}; {:.3f})', 3, '--', "$u_2$"),
         'r_star':('({:.3f}; {:.3f})', 3, r'$R_\odot$', "$R_\star$"),
@@ -210,11 +226,14 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
                 priordict[p][1], priordict[p][2], fmts
             )
         else:
-            key = priordict[p][0]
+            if 'u_star' in p:
+                # key for 'u_star[0]' and 'u_star[1]' parameters are both
+                # mapped to same prior.
+                priortuple = ('QuadLimbDark',)
+            else:
+                priortuple = priordict[p]
+            key = priortuple[0]
             if isinstance(key, str) and len(key)>1:
-                pr[p] = fndict[key]
-            elif isinstance(key, str) and len(key)==1:
-                key = priordict[p]
                 pr[p] = fndict[key]
             else:
                 raise NotImplementedError
