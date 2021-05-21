@@ -9,6 +9,9 @@ Post-fit plots:
 MAP plots:
     plot_light_curve
     plot_phased_light_curve
+
+Helper functions:
+    doublemedian, doublepctile, get_ylimguess
 """
 import os, corner, pickle
 from datetime import datetime
@@ -629,6 +632,30 @@ def plot_light_curve(data, soln, outpath, mask=None):
     savefig(fig, outpath, dpi=350)
 
 
+def doublemedian(x):
+    return np.median(np.median(x, axis=0), axis=0)
+
+
+def doublepctile(x):
+    # flatten/merge cores and chains. then percentile over both.
+    return np.percentile(
+        np.reshape(
+            np.array(x), (x.shape[0]*x.shape[1], x.shape[2])
+        ),
+        [16,84], axis=0
+    )
+
+
+def get_ylimguess(y):
+
+    ylow = np.nanpercentile(y, 0.1)
+    yhigh = np.nanpercentile(y, 99.9)
+    ydiff = (yhigh-ylow)
+    ymin = ylow - 0.35*ydiff
+    ymax = yhigh + 0.35*ydiff
+    return [ymin,ymax]
+
+
 def plot_phased_light_curve(
     data, soln, outpath, mask=None, from_trace=False,
     ylimd=None, alpha=0.3
@@ -652,20 +679,6 @@ def plot_phased_light_curve(
         gridspec_kw={
             "height_ratios": [3,1]
         }
-    )
-
-    doublemedian = (
-        lambda x:
-        np.median(np.median(x, axis=0), axis=0)
-    )
-    # flatten/merge cores and chains. then percentile over both.
-    doublepctile = (
-        lambda x:
-            np.percentile(
-                np.reshape(
-                    np.array(x), (x.shape[0]*x.shape[1], x.shape[2])
-                ), [16,84],
-            axis=0)
     )
 
     if from_trace==True:
@@ -750,6 +763,13 @@ def plot_phased_light_curve(
         a.set_xlim(-0.4*24,0.4*24)
         if isinstance(ylimd, dict):
             a.set_ylim(ylimd[k])
+        else:
+            # sensible default guesses
+            _y = 1e3*(y[mask]-gp_mod)
+            axd['A'].set_ylim(get_ylimguess(_y))
+            _y = 1e3*(y[mask] - gp_mod - lc_mod)
+            axd['B'].set_ylim(get_ylimguess(_y))
+
         format_ax(a)
 
     fig.tight_layout()
