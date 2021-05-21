@@ -658,7 +658,7 @@ def get_ylimguess(y):
 
 def plot_phased_light_curve(
     data, soln, outpath, mask=None, from_trace=False,
-    ylimd=None, alpha=0.3
+    ylimd=None, binsize_minutes=20
 ):
 
     assert len(data.keys()) == 1
@@ -721,8 +721,6 @@ def plot_phased_light_curve(
 
     x_fold = (x - _t0 + 0.5 * _per) % _per - 0.5 * _per
 
-    ax = axd['A']
-
     #For plotting
     lc_modx = x_fold[mask]
     lc_mody = lc_mod[np.argsort(lc_modx)]
@@ -735,9 +733,23 @@ def plot_phased_light_curve(
         # see https://github.com/matplotlib/matplotlib/issues/5907
         mpl.rcParams['agg.path.chunksize'] = 10000
 
+    #
+    # begin the plot!
+    #
+    ax = axd['A']
+
     ax.errorbar(24*x_fold[mask], 1e3*(y[mask]-gp_mod), yerr=1e3*_yerr,
-                color="k", label="data", alpha=alpha, fmt='.', elinewidth=1,
+                color="darkgray", label="data", fmt='.', elinewidth=0.2,
                 capsize=0, markersize=1, rasterized=True)
+
+    binsize_days = (binsize_minutes / (60*24))
+    orb_bd = phase_bin_magseries(
+        x_fold[mask], y[mask]-gp_mod, binsize=binsize_days, minbinelems=3
+    )
+    ax.scatter(
+        orb_bd['binnedphases']*24, 1e3*(orb_bd['binnedmags']), color='k', s=3,
+        alpha=1, zorder=1002#, linewidths=0.2, edgecolors='white'
+    )
 
     ax.plot(24*lc_modx, 1e3*lc_mody, color="C4", label="transit model",
             lw=1, zorder=1001, alpha=1)
@@ -749,13 +761,44 @@ def plot_phased_light_curve(
         )
         art.set_edgecolor("none")
 
+    # show representative binned error
+    _e = 1e3*np.median(_yerr)
+
+
+    # bigger bin size by 2x cadence improves uncertainty by sqrt(2).
+    texp_factor = texp/binsize_days
+    N_periods_observed = (np.max(x)-np.min(x))/_per
+    duty_cycle_fudge = 0.8 # rough estimate for TESS/Kepler
+    errorfactor = 1/( (texp_factor*duty_cycle_fudge*N_periods_observed)**(1/2) )
+
+    ax.errorbar(
+        0.9, 0.1, yerr=errorfactor*_e,
+        fmt='none', ecolor='black', alpha=1, elinewidth=1, capsize=2,
+        transform=ax.transAxes
+    )
+
+    print(f'{_e:.2f}, {errorfactor*_e:.2f}')
+
+
+
     ax.set_ylabel("Relative flux [ppt]")
     ax.set_xticklabels([])
 
     ax = axd['B']
     ax.errorbar(24*x_fold[mask], 1e3*(y[mask] - gp_mod - lc_mod), yerr=1e3*_yerr,
-                color="k", alpha=alpha, fmt='.', elinewidth=1, capsize=0,
+                color="darkgray", fmt='.', elinewidth=0.2, capsize=0,
                 markersize=1, rasterized=True)
+
+    binsize_days = (binsize_minutes / (60*24))
+    orb_bd = phase_bin_magseries(
+        x_fold[mask], y[mask]-gp_mod-lc_mod, binsize=binsize_days, minbinelems=3
+    )
+    ax.scatter(
+        orb_bd['binnedphases']*24, 1e3*(orb_bd['binnedmags']), color='k', s=3,
+        alpha=1, zorder=1002#, linewidths=0.2, edgecolors='white'
+    )
+    ax.axhline(0, color="C4", lw=1, ls='-', zorder=1000)
+
     ax.set_xlabel("Hours from mid-transit")
     ax.set_ylabel("Residual")
 
