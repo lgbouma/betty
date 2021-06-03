@@ -635,14 +635,17 @@ def plot_light_curve(data, soln, outpath, mask=None):
 def doublemedian(x):
     return np.median(np.median(x, axis=0), axis=0)
 
+def doublemean(x):
+    return np.nanmean(np.nanmean(x, axis=0), axis=0)
 
-def doublepctile(x):
+def doublepctile(x, SIGMA=[2.5,97.5]):
+    # [16, 84] for 1-sigma
     # flatten/merge cores and chains. then percentile over both.
     return np.percentile(
         np.reshape(
             np.array(x), (x.shape[0]*x.shape[1], x.shape[2])
         ),
-        [16,84], axis=0
+        SIGMA, axis=0
     )
 
 
@@ -658,8 +661,28 @@ def get_ylimguess(y):
 
 def plot_phased_light_curve(
     data, soln, outpath, mask=None, from_trace=False,
-    ylimd=None, binsize_minutes=20
+    ylimd=None, binsize_minutes=20, map_estimate=None, fullxlim=False, BINMS=3
 ):
+    """
+    Args:
+
+        data (OrderedDict): data['tess'] = (time, flux, flux_err, t_exp)
+
+        soln (az.data.inference_data.InferenceData): can MAP solution from
+        PyMC3. can also be the posterior's trace itself (m.trace.posterior).
+        If the posterior is passed, bands showing the 2-sigma uncertainty
+        interval will be drawn.
+
+        outpath (str): where to save the output.
+
+        from_trace: True is using m.trace.posterior
+
+    Optional:
+
+        map_estimate: if passed, uses this as the "best fit" line. Otherwise,
+        the nanmean is used (nanmedian was also considered).
+
+    """
 
     assert len(data.keys()) == 1
     name = list(data.keys())[0]
@@ -682,16 +705,16 @@ def plot_phased_light_curve(
     )
 
     if from_trace==True:
-        _t0 = np.median(soln["t0"])
-        _per = np.median(soln["period"])
+        _t0 = np.nanmean(soln["t0"])
+        _per = np.nanmean(soln["period"])
 
         if len(soln["gp_pred"].shape)==3:
             # (4, 500, 46055), ncores X nchains X time
-            medfunc = doublemedian
+            medfunc = doublemean
             pctfunc = doublepctile
         elif len(soln["gp_pred"].shape)==2:
-            medfunc = lambda x: np.median(x, axis=0)
-            pctfunc = lambda x: np.percentile(x, [16,84], axis=0)
+            medfunc = lambda x: np.mean(x, axis=0)
+            pctfunc = lambda x: np.percentile(x, [2.5,97.5], axis=0)
         else:
             raise NotImplementedError
         gp_mod = (
@@ -710,7 +733,12 @@ def plot_phased_light_curve(
                     np.exp(2 * medfunc(soln["log_jitter"])))
         )
 
-    elif from_trace==False:
+    if (from_trace == False) or (map_estimate is not None):
+        if map_estimate is not None:
+            # If map_estimate is given, over-ride the mean/median estimate above,
+            # take the MAP.
+            print('WRN! Overriding mean/median estimate with MAP.')
+            soln = deepcopy(map_estimate)
         _t0 = soln["t0"]
         _per = soln["period"]
         gp_mod = soln["gp_pred"] + soln["mean"]
@@ -747,7 +775,8 @@ def plot_phased_light_curve(
         x_fold[mask], y[mask]-gp_mod, binsize=binsize_days, minbinelems=3
     )
     ax.scatter(
-        orb_bd['binnedphases']*24, 1e3*(orb_bd['binnedmags']), color='k', s=3,
+        orb_bd['binnedphases']*24, 1e3*(orb_bd['binnedmags']), color='k',
+        s=BINMS,
         alpha=1, zorder=1002#, linewidths=0.2, edgecolors='white'
     )
 
@@ -762,8 +791,7 @@ def plot_phased_light_curve(
         art.set_edgecolor("none")
 
     # show representative binned error
-    _e = 1e3*np.median(_yerr)
-
+    _e = 1e3*np.nanmean(_yerr)
 
     # bigger bin size by 2x cadence improves uncertainty by sqrt(2).
     texp_factor = texp/binsize_days
@@ -771,19 +799,12 @@ def plot_phased_light_curve(
     duty_cycle_fudge = 0.8 # rough estimate for TESS/Kepler
     errorfactor = 1/( (texp_factor*duty_cycle_fudge*N_periods_observed)**(1/2) )
 
-    ax.errorbar(
-        0.9, 0.1, yerr=errorfactor*_e,
-        fmt='none', ecolor='black', alpha=1, elinewidth=1, capsize=2,
-        transform=ax.transAxes
-    )
-
-    print(f'{_e:.2f}, {errorfactor*_e:.2f}')
-
-
+    binned_err = errorfactor*_e
 
     ax.set_ylabel("Relative flux [ppt]")
     ax.set_xticklabels([])
 
+    # residual axis
     ax = axd['B']
     ax.errorbar(24*x_fold[mask], 1e3*(y[mask] - gp_mod - lc_mod), yerr=1e3*_yerr,
                 color="darkgray", fmt='.', elinewidth=0.2, capsize=0,
@@ -794,16 +815,24 @@ def plot_phased_light_curve(
         x_fold[mask], y[mask]-gp_mod-lc_mod, binsize=binsize_days, minbinelems=3
     )
     ax.scatter(
-        orb_bd['binnedphases']*24, 1e3*(orb_bd['binnedmags']), color='k', s=3,
-        alpha=1, zorder=1002#, linewidths=0.2, edgecolors='white'
+        orb_bd['binnedphases']*24, 1e3*(orb_bd['binnedmags']), color='k',
+        s=BINMS, alpha=1, zorder=1002#, linewidths=0.2, edgecolors='white'
     )
     ax.axhline(0, color="C4", lw=1, ls='-', zorder=1000)
+
+    if from_trace==True:
+        art = ax.fill_between(
+            24*lc_modx, 1e3*(lc_mod_hi-lc_mody), 1e3*(lc_mod_lo-lc_mody), color="C4", alpha=0.5,
+            zorder=1000
+        )
+        art.set_edgecolor("none")
 
     ax.set_xlabel("Hours from mid-transit")
     ax.set_ylabel("Residual")
 
     for k,a in axd.items():
-        a.set_xlim(-0.4*24,0.4*24)
+        if not fullxlim:
+            a.set_xlim(-0.4*24,0.4*24)
         if isinstance(ylimd, dict):
             a.set_ylim(ylimd[k])
         else:
@@ -814,6 +843,22 @@ def plot_phased_light_curve(
             axd['B'].set_ylim(get_ylimguess(_y))
 
         format_ax(a)
+
+    # NOTE: hacky approach: override it as the stddev of the residuals. This is
+    # dangerous, b/c if the errors are totally wrong, you might not know.
+    DO_HACK = 0
+    if DO_HACK:
+        print('WRN! Overriding binned unc as the residuals')
+        binned_err = np.nanstd(1e3*(orb_bd['binnedmags']))
+
+    axd['A'].errorbar(
+        0.9, 0.1, yerr=binned_err,
+        fmt='none', ecolor='black', alpha=1, elinewidth=1, capsize=2,
+        transform=axd['A'].transAxes
+    )
+
+    print(f'{_e:.2f}, {errorfactor*_e:.2f}')
+
 
     fig.tight_layout()
 
