@@ -2,7 +2,7 @@
 ModelParser
 ModelFitter
     run_transit_inference
-    run_gptransit_inference
+    run_RotStochGPtransit_inference
     run_rvspotorbit_inference
 
     Not yet implemented here (but see /timmy/):
@@ -40,7 +40,7 @@ class ModelParser:
 
     def verify_modelcomponents(self):
 
-        validcomponents = ['simpletransit', 'rvspotorbit', 'gptransit',
+        validcomponents = ['simpletransit', 'rvspotorbit', 'RotStochGPtransit',
                            'allindivtransit', 'alltransit']
 
         assert len(self.modelcomponents) >= 1
@@ -73,7 +73,7 @@ class ModelFitter(ModelParser):
         implemented_models = [
             'simpletransit', 'allindivtransit', 'oddindivtransit',
             'evenindivtransit', 'rvorbit', 'rvspotorbit', 'alltransit',
-            'gptransit'
+            'RotStochGPtransit'
         ]
 
         if modelid in implemented_models:
@@ -106,9 +106,9 @@ class ModelFitter(ModelParser):
             )
             print(f'Finished run_transit_inference for {modelid}...')
 
-        elif modelid == 'gptransit':
+        elif modelid == 'RotStochGPtransit':
             print(f'Beginning PyMC3 run for {modelid}...')
-            self.run_gptransit_inference(
+            self.run_RotStochGPtransit_inference(
                 pklpath, make_threadsafe=make_threadsafe
             )
             print(f'Finished PyMC3 for {modelid}...')
@@ -328,7 +328,7 @@ class ModelFitter(ModelParser):
                 start=map_estimate, cores=self.N_cores,
                 chains=self.N_chains,
                 return_inferencedata=True,
-                target_accept=0.95
+                target_accept=0.9
             )
 
         with open(pklpath, 'wb') as buff:
@@ -340,10 +340,11 @@ class ModelFitter(ModelParser):
         self.map_estimate = map_estimate
 
 
-    def run_gptransit_inference(self, pklpath, make_threadsafe=True):
+    def run_RotStochGPtransit_inference(self, pklpath, make_threadsafe=True):
         """
         Fit light curve for an Agol+19 transit, + a GP for the stellar
-        variability, simultaneously.  Assumes single instrument.
+        variability, simultaneously.  Assumes single instrument.  The GP is a
+        RotationTerm with a stochastic (SHOTerm) component.
 
         Fits for:
 
