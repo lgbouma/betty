@@ -3,6 +3,7 @@ ModelParser
 ModelFitter
     run_transit_inference
     run_RotStochGPtransit_inference
+    run_RotGPtransit_inference
     run_rvspotorbit_inference
 
     Not yet implemented here (but see /timmy/):
@@ -41,7 +42,8 @@ class ModelParser:
     def verify_modelcomponents(self):
 
         validcomponents = ['simpletransit', 'rvspotorbit', 'RotStochGPtransit',
-                           'allindivtransit', 'alltransit']
+                           'RotGPtransit', 'allindivtransit',
+                           'alltransit']
 
         assert len(self.modelcomponents) >= 1
 
@@ -73,7 +75,7 @@ class ModelFitter(ModelParser):
         implemented_models = [
             'simpletransit', 'allindivtransit', 'oddindivtransit',
             'evenindivtransit', 'rvorbit', 'rvspotorbit', 'alltransit',
-            'RotStochGPtransit'
+            'RotStochGPtransit', 'RotGPtransit'
         ]
 
         if modelid in implemented_models:
@@ -109,6 +111,13 @@ class ModelFitter(ModelParser):
         elif modelid == 'RotStochGPtransit':
             print(f'Beginning PyMC3 run for {modelid}...')
             self.run_RotStochGPtransit_inference(
+                pklpath, make_threadsafe=make_threadsafe
+            )
+            print(f'Finished PyMC3 for {modelid}...')
+
+        elif modelid == 'RotGPtransit':
+            print(f'Beginning PyMC3 run for {modelid}...')
+            self.run_RotGPtransit_inference(
                 pklpath, make_threadsafe=make_threadsafe
             )
             print(f'Finished PyMC3 for {modelid}...')
@@ -345,6 +354,9 @@ class ModelFitter(ModelParser):
         Fit light curve for an Agol+19 transit, + a GP for the stellar
         variability, simultaneously.  Assumes single instrument.  The GP is a
         RotationTerm with a stochastic (SHOTerm) component.
+
+        The stochastic term of the GP kernel has Q fixed to 1/3 for
+        magical reasons not explained in the docs.
 
         Fits for:
 
@@ -764,10 +776,16 @@ class ModelFitter(ModelParser):
 
         from betty import plotting as bp
 
-        outpath = os.path.join(self.PLOTDIR, 'flux_vs_time_map_estimate.png')
+        outpath = os.path.join(
+            self.PLOTDIR,
+            'flux_vs_time_map_estimate_RotStochGPtransit.png'
+        )
         bp.plot_light_curve(self.data, map_estimate, outpath)
 
-        outpath = os.path.join(self.PLOTDIR, 'flux_vs_phase_map_estimate.png')
+        outpath = os.path.join(
+            self.PLOTDIR,
+            'flux_vs_phase_map_estimate_RotStochGPtransit.png'
+        )
         bp.plot_phased_light_curve(self.data, map_estimate, outpath)
 
         print('Got MAP estimate. Beginning sampling...')
@@ -795,6 +813,470 @@ class ModelFitter(ModelParser):
         self.model = model
         self.trace = trace
         self.map_estimate = map_estimate
+
+
+    def run_RotGPtransit_inference(self, pklpath, make_threadsafe=True):
+        """
+        Fit light curve for an Agol+19 transit, + a GP for the stellar
+        variability, simultaneously.  Assumes single instrument.  The GP is a
+        RotationTerm (Prot and 0.5xProt) only.
+
+        Fits for:
+
+            [f, log_dQ, log_Q0, log_prot, sigma_rot, log_jitter,
+            ecs, b, period, t0, log_r, u[1], u[0], r_star, logg_star, mean]
+        """
+
+        p = self.priordict
+
+        # if the model has already been run, pull the result from the
+        # pickle. otherwise, run it.
+        if os.path.exists(pklpath):
+            d = pickle.load(open(pklpath, 'rb'))
+            self.model = d['model']
+            self.trace = d['trace']
+            self.map_estimate = d['map_estimate']
+            return 1
+
+        def build_model(mask=None, start=None):
+
+            # assuming single instrument
+            assert len(self.data.keys()) == 1
+            name = list(self.data.keys())[0]
+            x,y,yerr,texp = self.data[name]
+
+            nplanets = 1
+
+            if mask is None:
+                mask = np.ones(len(x), dtype=bool)
+
+            with pm.Model() as model:
+
+                # Shared parameters
+                mean = pm.Normal(
+                    "mean", mu=p[f'mean'][1], sd=p[f'mean'][2],
+                    testval=p[f'mean'][1]
+                )
+
+                # Stellar parameters.
+                logg_star = pm.Normal(
+                    "logg_star", mu=p['logg_star'][1], sd=p['logg_star'][2]
+                )
+
+                r_star = pm.Bound(pm.Normal, lower=0.0)(
+                    "r_star", mu=p['r_star'][1], sd=p['r_star'][2]
+                )
+                rho_star = pm.Deterministic(
+                    "rho_star", factor*10**logg_star / r_star
+                )
+
+                # limb-darkening. adopt uniform, rather than Kipping 2013 -- i.e., take
+                # an "informed prior" approach.
+                u_star = xo.QuadLimbDark("u_star")
+
+                #u0 = pm.Uniform(
+                #    'u[0]', lower=p['u[0]'][1],
+                #    upper=p['u[0]'][2],
+                #    testval=p['u[0]'][3]
+                #)
+                #u1 = pm.Uniform(
+                #    'u[1]', lower=p['u[1]'][1],
+                #    upper=p['u[1]'][2],
+                #    testval=p['u[1]'][3]
+                #)
+                #u_star = [u0, u1]
+
+                # fix Rp/Rs across bandpasses
+                if p['log_r'][0] == 'Uniform':
+                    log_r = pm.Uniform('log_r', lower=p['log_r'][1],
+                                       upper=p['log_r'][2], testval=p['log_r'][3])
+                else:
+                    raise NotImplementedError
+                r = pm.Deterministic('r', tt.exp(log_r))
+
+                # orbital parameters for planet (single)
+                t0 = pm.Normal(
+                    "t0", mu=p['t0'][1], sd=p['t0'][2], testval=p['t0'][1]
+                )
+                period = pm.Normal(
+                    'period', mu=p['period'][1], sd=p['period'][2],
+                    testval=p['period'][1]
+                )
+                b = xo.distributions.ImpactParameter(
+                    "b", ror=r, testval=p['b'][1]
+                )
+
+                # NOTE: begin copy-pasting in (selectively) from Trevor David's
+                # epic216357880 analysis. (Which ofc is based on DFM's
+                # tutorials).
+
+                # eccentricity
+                ecs = pmx.UnitDisk(
+                    "ecs", shape=(2, nplanets),
+                    testval=0.01 * np.ones((2, nplanets))
+                )
+                ecc = pm.Deterministic(
+                    "ecc",
+                    tt.sum(ecs ** 2, axis=0)
+                )
+                omega = pm.Deterministic(
+                    "omega", tt.arctan2(ecs[1], ecs[0])
+                )
+                xo.eccentricity.vaneylen19(
+                    "ecc_prior",
+                    multi=False, shape=nplanets, fixed=True, observed=ecc
+                )
+
+                #
+                # RV stuff: for a future model implementation
+                #
+                # # RV jitter & a quadratic RV trend
+                # log_sigma_rv = pm.Normal(
+                #     "log_sigma_rv", mu=np.log(np.median(yerr_rv)), sd=5
+                # )
+                # trend = pm.Normal(
+                #     "trend", mu=0, sd=10.0 ** -np.arange(3)[::-1], shape=3
+                # )
+
+                # Transit jitter & GP parameters
+                # log_sigma_lc = pm.Normal(
+                #     "log_sigma_lc", mu=np.log(np.median(yerr[mask])), sd=10
+                # )
+                # log_rho_gp = pm.Normal("log_rho_gp", mu=0.0, sd=10)
+                # log_sigma_gp = pm.Normal(
+                #     "log_sigma_gp", mu=np.log(np.std(y[mask])), sd=10
+                # )
+
+                # orbit model
+                orbit = xo.orbits.KeplerianOrbit(
+                    period=period,
+                    t0=t0,
+                    b=b,
+                    rho_star=rho_star,
+                    r_star=r_star,
+                    ecc=ecc,
+                    omega=omega
+                )
+
+                star = xo.LimbDarkLightCurve(u_star)
+
+                # NOTE: could loop over instruments here... (e.g., TESS, keplerllc,
+                # keplersc, ground-based instruments...). Instead, opt for simpler
+                # single-instrument approach.
+
+                # Compute the model light curve
+                light_curves = pm.Deterministic(
+                    "light_curves",
+                    star.get_light_curve(
+                        orbit=orbit, r=r, t=x[mask], texp=texp
+                    )
+                )
+
+                # Line that adds the transit models of different planets in the system,
+                # if relevant
+                light_curve = pm.math.sum(light_curves, axis=-1) + mean
+                resid = y[mask] - light_curve
+
+                ## Below is the GP model from the "together" tutorial. We'll use the GP
+                ## model from the stellar variability tutorial instead.  GP model for
+                ## the light curve
+                # kernel = terms.SHOTerm(
+                #     sigma=tt.exp(log_sigma_gp),
+                #     rho=tt.exp(log_rho_gp),
+                #     Q=1 / np.sqrt(2),
+                # )
+                # gp = GaussianProcess(kernel, t=x[mask], yerr=tt.exp(log_sigma_lc))
+                # gp.marginal("transit_obs", observed=resid)
+                # pm.Deterministic("gp_pred", gp.predict(resid))
+
+                # Use the GP model from the stellar variability tutorial
+                # https://gallery.exoplanet.codes/en/latest/tutorials/stellar-variability/
+                # Literally the same prior parameters too.
+
+                # A jitter term describing excess white noise
+                log_jitter = pm.Normal("log_jitter", mu=np.log(np.mean(yerr)),
+                                       sd=p['log_jitter'][2])
+
+                ##A term to describe the non-periodic variability
+                #sigma = pm.InverseGamma(
+                #    "sigma",
+                #    **pmx.estimate_inverse_gamma_parameters(
+                #        p['sigma'][1], p['sigma'][2]
+                #    )
+                #)
+
+                # NOTE: default recommended by DFM is InvGamma(0.5, 2). But in
+                # our model of [non-periodic SHO term] X [periodic SHO terms at
+                # Prot and 0.5*Prot] this can produce tension against the
+                # RotationTerm, leading to overfitting -- preferring to explain
+                # the transits away as noise rather than signal. So, take a
+                # uniform prior, U[1,10].  This roughly corresponds to the
+                # "stochastically-driven, damped harmonic oscillator" in the
+                # non-period SHO term
+
+                #rho = pm.Uniform("rho", lower=p['rho'][1], upper=p['rho'][2])
+                #rho = pm.InverseGamma(
+                #    "rho", **pmx.estimate_inverse_gamma_parameters(
+                #        p['rho'][1], p['rho'][2]
+                #    )
+                #)
+
+                # The parameters of the RotationTerm kernel
+                sigma_rot = pm.InverseGamma(
+                    "sigma_rot", **pmx.estimate_inverse_gamma_parameters(
+                        p['sigma_rot'][1], p['sigma_rot'][2]
+                    )
+                )
+                log_prot = pm.Normal("log_prot", mu=p['log_prot'][1],
+                                     sd=p['log_prot'][2])
+                prot = pm.Deterministic("prot", tt.exp(log_prot))
+                log_Q0 = pm.Normal(
+                    "log_Q0", mu=p['log_Q0'][1], sd=p['log_Q0'][2]
+                )
+                log_dQ = pm.Normal(
+                    "log_dQ", mu=p['log_dQ'][1], sd=p['log_dQ'][2]
+                )
+                f = pm.Uniform(
+                    "f", lower=p['f'][1], upper=p['f'][2]
+                )
+
+                # Set up the Gaussian Process model. See
+                # https://celerite2.readthedocs.io/en/latest/tutorials/first/
+                # for intro.
+                # Non-periodic term
+                #kernel = terms.SHOTerm(sigma=sigma, rho=rho, Q=1/3.0)
+                # Quasiperiodic term
+                kernel = terms.RotationTerm(
+                    sigma=sigma_rot,
+                    period=prot,
+                    Q0=tt.exp(log_Q0),
+                    dQ=tt.exp(log_dQ),
+                    f=f,
+                )
+                gp = GaussianProcess(
+                    kernel,
+                    t=x[mask],
+                    diag=yerr[mask]**2 + tt.exp(2 * log_jitter),
+                    mean=mean,
+                    quiet=True,
+                )
+
+                # Compute the Gaussian Process likelihood and add it into the
+                # the PyMC3 model as a "potential"
+                gp.marginal("transit_obs", observed=resid)
+
+                # Compute the mean model prediction for plotting purposes
+                pm.Deterministic("gp_pred", gp.predict(resid))
+
+                # Commenting out the RV stuff
+                # And then include the RVs as in the RV tutorial
+                # x_rv_ref = 0.5 * (x_rv.min() + x_rv.max())
+
+                # def get_rv_model(t, name=""):
+                #     # First the RVs induced by the planets
+                #     vrad = orbit.get_radial_velocity(t)
+                #     pm.Deterministic("vrad" + name, vrad)
+
+                #     # Define the background model
+                #     A = np.vander(t - x_rv_ref, 3)
+                #     bkg = pm.Deterministic("bkg" + name, tt.dot(A, trend))
+
+                #     # Sum over planets and add the background to get the full model
+                #     return pm.Deterministic(
+                #         "rv_model" + name, tt.sum(vrad, axis=-1) + bkg
+                #     )
+
+                # # Define the model
+                # rv_model = get_rv_model(x_rv)
+                # get_rv_model(t_rv, name="_pred")
+
+                # # The likelihood for the RVs
+                # err = tt.sqrt(yerr_rv ** 2 + tt.exp(2 * log_sigma_rv))
+                # pm.Normal("obs", mu=rv_model, sd=err, observed=y_rv)
+
+                #
+                # Begin: derived parameters
+                #
+
+                # planet radius in jupiter radii
+                r_planet = pm.Deterministic(
+                    "r_planet", (r*r_star)*( 1*units.Rsun/(1*units.Rjup) ).cgs.value
+                )
+
+                #
+                # eq 30 of winn+2010, ignoring planet density.
+                #
+                a_Rs = pm.Deterministic(
+                    "a_Rs",
+                    (rho_star * period**2)**(1/3)
+                    *
+                    (( (1*units.gram/(1*units.cm)**3) * (1*units.day**2)
+                      * const.G / (3*np.pi)
+                    )**(1/3)).cgs.value
+                )
+
+                #
+                # cosi. assumes e!=0 (e.g., Winn+2010 eq 7)
+                #
+                cosi = pm.Deterministic(
+                    "cosi", (b / a_Rs)/( (1-ecc**2)/(1+ecc*pm.math.sin(omega)) )
+                )
+
+                # safer than tt.arccos(cosi)
+                sini = pm.Deterministic("sini", pm.math.sqrt( 1 - cosi**2 ))
+
+                #
+                # transit durations (T_14, T_13) for circular orbits. Winn+2010 Eq 14, 15.
+                # units: hours.
+                #
+                T_14 = pm.Deterministic(
+                    'T_14',
+                    (period/np.pi)*
+                    tt.arcsin(
+                        (1/a_Rs) * pm.math.sqrt( (1+r)**2 - b**2 )
+                        * (1/sini)
+                    )*24
+                    *(
+                        pm.math.sqrt(1-ecc**2)/(1+ecc*pm.math.sin(omega))
+                    )
+                )
+
+                T_13 =  pm.Deterministic(
+                    'T_13',
+                    (period/np.pi)*
+                    tt.arcsin(
+                        (1/a_Rs) * pm.math.sqrt( (1-r)**2 - b**2 )
+                        * (1/sini)
+                    )*24
+                    *(
+                        pm.math.sqrt(1-ecc**2)/(1+ecc*pm.math.sin(omega))
+                    )
+                )
+
+                #
+                # End: derived parameters
+                #
+
+                # Fit for the maximum a posteriori parameters. This worked best
+                # (for "rudolf" project) when doing the GP parameters first,
+                # then the transit parameters. "All at once"
+                # (`pmx.optimize(start=start)`) did not work very well; a few
+                # other combinations of parameters did not work very well
+                # either. Using the plotting diagnostics below helped this.
+
+                # NOTE: Method 1: don't do full optimization.
+                np.random.seed(42)
+                if start is None:
+                    start = model.test_point
+
+                map_soln = start
+
+                # # RotationTerm: sigma_rot, prot, log_Q0, log_dQ, f
+                # # NOTE: all five no bueno. NOTE: sigma_rot, f, prot seems OK.
+                # map_soln = pmx.optimize(
+                #     start=map_soln,
+                #     vars=[sigma_rot, f, prot]
+                # )
+
+                # # SHO term: sigma, rho. Describes non-periodic variability.
+                # map_soln = pmx.optimize(
+                #     start=start,
+                #     vars=[sigma, rho]
+                # )
+
+                # Transit: [log_r, b, t0, period, r_star, logg_star, ecs,
+                # u_star]...]
+                map_soln = pmx.optimize(
+                    start=map_soln,
+                    vars=[log_r, b, ecc, omega, t0, period, r_star, logg_star,
+                          u_star]
+                )
+
+
+                # All GP terms + jitter and mean.
+                map_soln = pmx.optimize(
+                    start=map_soln,
+                    vars=[sigma_rot, prot, log_Q0, log_dQ, f,
+                          log_jitter, mean]
+                )
+
+
+                ## bonus
+                #map_soln = pmx.optimize(
+                #    start=map_soln,
+                #    vars=[log_r, b, log_Q0, log_dQ]
+                #)
+
+
+                # # Limb-darkening
+                # map_soln = pmx.optimize(
+                #     start=map_soln,
+                #     vars=[u0, u1]
+                # )
+
+
+                # # Jitter and mean:
+                # map_soln = pmx.optimize(
+                #     start=map_soln,
+                #     vars=[log_jitter, mean]
+                # )
+
+                # # Full optimization
+                map_soln = pmx.optimize(start=map_soln)
+
+
+            return model, map_soln
+
+        model, map_estimate = build_model()
+
+        if make_threadsafe:
+            pass
+        else:
+            # NOTE: would usually plot MAP estimate here, but really
+            # there's not a huge need.
+            print(map_estimate)
+            pass
+
+        from betty import plotting as bp
+
+        outpath = os.path.join(
+            self.PLOTDIR,
+            'flux_vs_time_map_estimate_RotGPtransit.png'
+        )
+        bp.plot_light_curve(self.data, map_estimate, outpath)
+
+        outpath = os.path.join(
+            self.PLOTDIR,
+            'flux_vs_phase_map_estimate_RotGPtransit.png'
+        )
+        bp.plot_phased_light_curve(self.data, map_estimate, outpath)
+
+        print('Got MAP estimate. Beginning sampling...')
+        # sample from the posterior defined by this model.
+
+        #
+        # NOTE: some of Dan's tutorials do sigma-clipping at this point. If the
+        # MAP estimate looks good enough... no need!
+        #
+
+        with model:
+            trace = pmx.sample(
+                tune=self.N_samples, draws=self.N_samples,
+                start=map_estimate, cores=self.N_cores,
+                chains=self.N_chains,
+                return_inferencedata=True,
+                initial_accept=0.8,
+                target_accept=0.95
+            )
+
+        with open(pklpath, 'wb') as buff:
+            pickle.dump({'model': model, 'trace': trace,
+                         'map_estimate': map_estimate}, buff)
+
+        self.model = model
+        self.trace = trace
+        self.map_estimate = map_estimate
+
 
 
     def run_alltransit_inference(self, pklpath, make_threadsafe=True):
