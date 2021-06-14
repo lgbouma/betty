@@ -661,7 +661,8 @@ def get_ylimguess(y):
 
 def plot_phased_light_curve(
     data, soln, outpath, mask=None, from_trace=False,
-    ylimd=None, binsize_minutes=20, map_estimate=None, fullxlim=False, BINMS=3
+    ylimd=None, binsize_minutes=20, map_estimate=None, fullxlim=False, BINMS=3,
+    do_hacky_reprerror=False
 ):
     """
     Args:
@@ -846,8 +847,7 @@ def plot_phased_light_curve(
 
     # NOTE: hacky approach: override it as the stddev of the residuals. This is
     # dangerous, b/c if the errors are totally wrong, you might not know.
-    DO_HACK = 0
-    if DO_HACK:
+    if do_hacky_reprerror:
         print('WRN! Overriding binned unc as the residuals')
         binned_err = np.nanstd(1e3*(orb_bd['binnedmags']))
 

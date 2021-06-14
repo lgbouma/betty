@@ -1,4 +1,6 @@
 """
+Full MAP and sampling recipes. Contents include:
+
 ModelParser
 ModelFitter
     run_transit_inference
@@ -6,10 +8,10 @@ ModelFitter
     run_RotGPtransit_inference
     run_rvspotorbit_inference
 
-    Not yet implemented here (but see /timmy/):
-        run_alltransit_inference
-        run_rvorbit_inference
-        run_allindivtransit_inference
+Not yet implemented here (but see /timmy/):
+    run_alltransit_inference
+    run_rvorbit_inference
+    run_allindivtransit_inference
 """
 import logging
 logging.getLogger("filelock").setLevel(logging.ERROR)
@@ -1249,9 +1251,9 @@ class ModelFitter(ModelParser):
             self.PLOTDIR,
             'flux_vs_phase_map_estimate_RotGPtransit.png'
         )
-        bp.plot_phased_light_curve(self.data, map_estimate, outpath)
+        bp.plot_phased_light_curve(self.data, map_estimate, outpath,
+                                   do_hacky_reprerror=True)
 
-        print('Got MAP estimate. Beginning sampling...')
         # sample from the posterior defined by this model.
 
         #
