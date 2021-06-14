@@ -2,7 +2,6 @@
 MAP fitting recipes. Contents include:
 
     flatten_starspots
-
 """
 import logging
 logging.getLogger("filelock").setLevel(logging.ERROR)
@@ -22,11 +21,33 @@ import aesara_theano_fallback.tensor as tt
 
 from betty.constants import factor
 
-def flatten_starspots(time, flux, flux_err, p_rotation):
+def flatten_starspots(time, flux, flux_err, p_rotation, flare_iterate=False):
+    """
+    Given time, flux, flux_error, and rotation period estimate, perform an
+    iterative fitting procedure to detrend the rotation signal.
+
+    Step 1. Build a two-term mixed SHOTerm GP model with quasi-periodic kernels
+    at Prot and 0.5$\times$Prot. Fit it.
+
+    Step 2.  Select points more than twice the median absolute
+    deviation from the residual, and exclude them.  Repeat Step 1.
+
+    Step 3. (If flare_iterate).  On the residual from Step 2, identify all
+    flares, requiring them to be at least 20 cadences apart, at least 7
+    median absolute deviations from the median baseline, and lasting at least 2
+    cadences in duration.  Build the mask spanning these times, from 5 minutes
+    before each flare begins to 2.5 minutes after the final flare cadence.
+    Repeat Step 1 a final time.
+
+    Kwargs:
+        flare_iterate (bool): if True, makes an altaipony-based flare mask
+        after initial GP fit, and then re-fits. Requires `altaipony`
+        dependency.
+    """
 
     x,y,yerr = time,flux,flux_err
 
-    def build_model(mask=None, start=None):
+    def build_starspot_model(mask=None, start=None):
 
         if mask is None:
             mask = np.ones(len(x), dtype=bool)
@@ -44,7 +65,9 @@ def flatten_starspots(time, flux, flux_err, p_rotation):
             sigma_rot = pm.InverseGamma(
                 "sigma_rot", **pmx.estimate_inverse_gamma_parameters(1.0, 5.0)
             )
-            log_period = pm.Normal("log_period", mu=np.log(p_rotation), sigma=1.0)
+            log_period = pm.Normal(
+                "log_period", mu=np.log(p_rotation), sigma=0.1
+            )
             period = pm.Deterministic("period", tt.exp(log_period))
             log_Q0 = pm.HalfNormal("log_Q0", sigma=2.0)
             log_dQ = pm.Normal("log_dQ", mu=0.0, sigma=0.5)
@@ -85,15 +108,41 @@ def flatten_starspots(time, flux, flux_err, p_rotation):
 
         return model, map_soln
 
-    model0, map_soln0 = build_model()
+    model0, map_soln0 = build_starspot_model()
     print(map_soln0)
 
     resid = (y - map_soln0['pred'])
     mad = np.nanmedian(np.abs(resid))
-    mask = np.abs(resid) < 3 * mad
+    mask = np.abs(resid) < 2 * mad
 
-    model1, map_soln1 = build_model(mask=mask, start=None)
+    model1, map_soln1 = build_starspot_model(mask=mask, start=None)
     print(map_soln1)
+
+    if flare_iterate:
+        from altaipony.flarelc import FlareLightCurve
+
+        resid = (y - map_soln1['pred'])
+        mad = np.nanmedian(np.abs(resid))
+
+        flc = FlareLightCurve(time=x, flux=resid, flux_err=yerr)
+        window_length = 241 # 240 minutes
+        flcd = flc.detrend("savgol", window_length=window_length)
+        #kwargs passed to find_flares_in_cont_obs_period
+        # N1: N1*sigma above median
+        # N2: N2*sigma above detrended flux error
+        flcd = flcd.find_flares(20, **{'N1':7,'N2':7,'N3':2,'sigma':mad})
+        fl_df = flcd.flares
+
+        inv_mask = np.zeros(len(x)).astype(bool)
+
+        eps = 2.5/(60*24) # mask 5 minutes before / 2.5 after flare
+        for t0,t1 in zip(nparr(fl_df.tstart),nparr(fl_df.tstop)):
+            inv_mask |= (x >= t0-2*eps) & (x <= t1+eps)
+
+        mask = ~inv_mask
+
+        model1, map_soln1 = build_starspot_model(mask=mask, start=None)
+        print(map_soln1)
 
     trend_flux = map_soln1['pred']
     flat_flux = flux/trend_flux
