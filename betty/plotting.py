@@ -9,6 +9,7 @@ Post-fit plots:
 MAP plots:
     plot_light_curve
     plot_phased_light_curve
+    plot_phased_subsets
 
 Helper functions:
     doublemedian, doublepctile, get_ylimguess
@@ -861,6 +862,260 @@ def plot_phased_light_curve(
 
 
     fig.tight_layout()
+
+    savefig(fig, outpath, dpi=350)
+    plt.close('all')
+
+
+def plot_phased_subsets(
+    data, soln, outpath, timesubsets, mask=None, from_trace=False,
+    ylimd=None, binsize_minutes=20, map_estimate=None, fullxlim=False, BINMS=3,
+    do_hacky_reprerror=False, yoffsetNsigma=4, inch_per_subset=1
+):
+    """
+    Args:
+
+        data (OrderedDict): data['tess'] = (time, flux, flux_err, t_exp)
+
+        soln (az.data.inference_data.InferenceData): can MAP solution from
+        PyMC3. can also be the posterior's trace itself (m.trace.posterior).
+        If the posterior is passed, bands showing the 2-sigma uncertainty
+        interval will be drawn.
+
+        outpath (str): where to save the output.
+
+        timesubsets (list): list of tuples of times to plot.
+
+        from_trace: True is using m.trace.posterior
+
+    Optional:
+
+        map_estimate: if passed, uses this as the "best fit" line. Otherwise,
+        the nanmean is used (nanmedian was also considered).
+
+    """
+
+    assert len(data.keys()) == 1
+    name = list(data.keys())[0]
+    x,y,yerr,texp = data[name]
+
+    if mask is None:
+        mask = np.ones(len(x), dtype=bool)
+
+    assert isinstance(timesubsets, list)
+    N_subsets = len(timesubsets)
+
+    plt.close('all')
+    set_style()
+    fig,axs = plt.subplots(ncols=2, figsize=(4,inch_per_subset*N_subsets), sharey=True)
+
+    if from_trace==True:
+        _t0 = np.nanmean(soln["t0"])
+        _per = np.nanmean(soln["period"])
+
+        if len(soln["gp_pred"].shape)==3:
+            # (4, 500, 46055), ncores X nchains X time
+            medfunc = doublemean
+            pctfunc = doublepctile
+        elif len(soln["gp_pred"].shape)==2:
+            medfunc = lambda x: np.mean(x, axis=0)
+            pctfunc = lambda x: np.percentile(x, [2.5,97.5], axis=0)
+        else:
+            raise NotImplementedError
+        gp_mod = (
+            medfunc(soln["gp_pred"]) +
+            medfunc(soln["mean"])
+        )
+        lc_mod = (
+            medfunc(np.sum(soln["light_curves"], axis=-1))
+        )
+        lc_mod_band = (
+            pctfunc(np.sum(soln["light_curves"], axis=-1))
+        )
+
+        _yerr = (
+            np.sqrt(yerr[mask] ** 2 +
+                    np.exp(2 * medfunc(soln["log_jitter"])))
+        )
+
+    if (from_trace == False) or (map_estimate is not None):
+        if map_estimate is not None:
+            # If map_estimate is given, over-ride the mean/median estimate above,
+            # take the MAP.
+            print('WRN! Overriding mean/median estimate with MAP.')
+            soln = deepcopy(map_estimate)
+        _t0 = soln["t0"]
+        _per = soln["period"]
+        gp_mod = soln["gp_pred"] + soln["mean"]
+        lc_mod = soln["light_curves"][:, 0]
+        _yerr = (
+            np.sqrt(yerr[mask] ** 2 + np.exp(2 * soln["log_jitter"]))
+        )
+
+    x_fold = (x - _t0 + 0.5 * _per) % _per - 0.5 * _per
+
+    if len(x_fold) > int(2e4):
+        # see https://github.com/matplotlib/matplotlib/issues/5907
+        mpl.rcParams['agg.path.chunksize'] = 10000
+
+    # iterate over the passed time subsets to show binned models in each
+    for time_ix, tsub in enumerate(timesubsets):
+
+        t0,t1 = tsub[0], tsub[1]
+        if len(tsub) == 3:
+            label = tsub[2]
+        else:
+            label = None
+        sel = (x>=t0) & (x<=t1)
+
+        if time_ix == 0:
+            # NB. the *residual* stdev should determine the spacing.
+            c_yoffset = yoffsetNsigma*np.std(1e3*(y[mask][sel]-gp_mod[sel]))
+            c_yoffset_resid = yoffsetNsigma*np.std(1e3*(y[mask][sel]-gp_mod[sel]-lc_mod[sel]))
+        y_offset = -time_ix*c_yoffset_resid
+        y_offset_resid = -time_ix*c_yoffset_resid
+
+        #For plotting
+        lc_modx = x_fold[mask][sel]
+        lc_mody = lc_mod[sel][np.argsort(lc_modx)]
+        if from_trace==True:
+            lc_mod_lo = lc_mod_band[0][sel][np.argsort(lc_modx)]
+            lc_mod_hi = lc_mod_band[1][sel][np.argsort(lc_modx)]
+        lc_modx = np.sort(lc_modx)
+
+        #
+        # begin the plot!
+        #
+        ax = axs[0]
+
+        #ax.errorbar(24*x_fold[mask][sel],
+        #            1e3*(y[mask][sel]-gp_mod[sel])+y_offset,
+        #            yerr=1e3*_yerr[sel],
+        #            color="darkgray", label="data", fmt='.', elinewidth=0.2,
+        #            capsize=0, markersize=1, rasterized=True)
+
+        binsize_days = (binsize_minutes / (60*24))
+        orb_bd = phase_bin_magseries(
+            x_fold[mask][sel], y[mask][sel]-gp_mod[sel], binsize=binsize_days, minbinelems=3
+        )
+        ax.scatter(
+            orb_bd['binnedphases']*24, 1e3*(orb_bd['binnedmags'])+y_offset, color='k',
+            s=BINMS,
+            alpha=1, zorder=1002#, linewidths=0.2, edgecolors='white'
+        )
+
+        if label is not None:
+            props = dict(boxstyle='square', facecolor='white', alpha=0.95, pad=0.15,
+                         linewidth=0)
+            trans = transforms.blended_transform_factory(
+                    ax.transAxes, ax.transData)
+            ax.text(0.97, np.nanpercentile(1e3*(orb_bd['binnedmags'])+y_offset,95),
+                    label, ha='right', va='center', bbox=props, zorder=9001,
+                    transform=trans,
+                    fontsize='x-small')
+
+
+        ax.plot(24*lc_modx, 1e3*lc_mody+y_offset, color="C4", label="transit model",
+                lw=1, zorder=1001, alpha=1)
+
+        if from_trace==True:
+            art = ax.fill_between(
+                24*lc_modx, 1e3*lc_mod_lo+y_offset, 1e3*lc_mod_hi+y_offset, color="C4", alpha=0.5,
+                zorder=1000
+            )
+            art.set_edgecolor("none")
+
+        # # show representative binned error
+        # _e = 1e3*np.nanmean(_yerr[sel])
+
+        # # bigger bin size by 2x cadence improves uncertainty by sqrt(2).
+        # texp_factor = texp/binsize_days
+        # N_periods_observed = (np.max(x)-np.min(x))/_per
+        # duty_cycle_fudge = 0.8 # rough estimate for TESS/Kepler
+        # errorfactor = 1/( (texp_factor*duty_cycle_fudge*N_periods_observed)**(1/2) )
+
+        # binned_err = errorfactor*_e
+
+        ax.set_ylabel("Relative flux [ppt]")
+        #ax.set_xticklabels([])
+
+        # residual axis
+        ax = axs[1]
+        # ax.errorbar(24*x_fold[mask][sel],
+        #             1e3*(y[mask][sel] - gp_mod[sel] -
+        #                  lc_mod[sel])+y_offset_resid,
+        #             yerr=1e3*_yerr[sel],
+        #             color="darkgray", fmt='.', elinewidth=0.2, capsize=0,
+        #             markersize=1, rasterized=True)
+
+        binsize_days = (binsize_minutes / (60*24))
+        orb_bd = phase_bin_magseries(
+            x_fold[mask][sel], y[mask][sel]-gp_mod[sel]-lc_mod[sel],
+            binsize=binsize_days, minbinelems=3
+        )
+        ax.scatter(
+            orb_bd['binnedphases']*24, 1e3*(orb_bd['binnedmags'])+y_offset_resid, color='k',
+            s=BINMS, alpha=1, zorder=1002#, linewidths=0.2, edgecolors='white'
+        )
+        ax.axhline(0+y_offset_resid, color="C4", lw=1, ls='-', zorder=1000)
+
+        if label is not None:
+            props = dict(boxstyle='square', facecolor='white', alpha=0.95, pad=0.15,
+                         linewidth=0)
+            trans = transforms.blended_transform_factory(
+                    ax.transAxes, ax.transData)
+            ax.text(0.97,
+                    np.nanpercentile(1e3*(orb_bd['binnedmags'])+y_offset_resid,95),
+                    label, ha='right', va='center', bbox=props, zorder=9001,
+                    transform=trans,
+                    fontsize='x-small')
+
+        if from_trace==True:
+            art = ax.fill_between(24*lc_modx,
+                                  1e3*(lc_mod_hi-lc_mody)+y_offset_resid,
+                                  1e3*(lc_mod_lo-lc_mody)+y_offset_resid,
+                color="C4", alpha=0.5, zorder=1000
+            )
+            art.set_edgecolor("none")
+
+    #ax.set_ylabel("Residual")
+
+    if isinstance(ylimd, dict):
+        for k,v in ylimd.items():
+            axs[int(k)].set_ylim(v)
+
+    fig.text(0.5,-0.01, 'Hours from mid-transit', ha='center',
+             fontsize='medium')
+
+    for a in axs:
+        #a.set_xlabel("Hours from mid-transit")
+        if not fullxlim:
+            a.set_xlim(-0.2*24,0.2*24)
+        # else:
+        #     # sensible default guesses
+        #     _y = 1e3*(y[mask]-gp_mod)
+        #     axd['A'].set_ylim(get_ylimguess(_y))
+        #     _y = 1e3*(y[mask] - gp_mod - lc_mod)
+        #     axd['B'].set_ylim(get_ylimguess(_y))
+
+        format_ax(a)
+
+    # # NOTE: hacky approach: override it as the stddev of the residuals. This is
+    # # dangerous, b/c if the errors are totally wrong, you might not know.
+    # if do_hacky_reprerror:
+    #     print('WRN! Overriding binned unc as the residuals')
+    #     binned_err = np.nanstd(1e3*(orb_bd['binnedmags']))
+
+    # axd['A'].errorbar(
+    #     0.9, 0.1, yerr=binned_err,
+    #     fmt='none', ecolor='black', alpha=1, elinewidth=1, capsize=2,
+    #     transform=axd['A'].transAxes
+    # )
+
+    #print(f'{_e:.2f}, {errorfactor*_e:.2f}')
+
+
+    fig.tight_layout(h_pad=0)
 
     savefig(fig, outpath, dpi=350)
     plt.close('all')
