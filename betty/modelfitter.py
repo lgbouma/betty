@@ -66,7 +66,7 @@ class ModelFitter(ModelParser):
 
     def __init__(self, modelid, data_df, priordict, N_samples=2000, N_cores=16,
                  N_chains=4, plotdir=None, pklpath=None,
-                 overwrite=1):
+                 overwrite=1, map_optimization_method=None):
 
         self.N_samples = N_samples
         self.N_cores = N_cores
@@ -120,7 +120,8 @@ class ModelFitter(ModelParser):
         elif modelid == 'RotGPtransit':
             print(f'Beginning PyMC3 run for {modelid}...')
             self.run_RotGPtransit_inference(
-                pklpath, make_threadsafe=make_threadsafe
+                pklpath, make_threadsafe=make_threadsafe,
+                map_optimization_method=map_optimization_method
             )
             print(f'Finished PyMC3 for {modelid}...')
 
@@ -817,11 +818,21 @@ class ModelFitter(ModelParser):
         self.map_estimate = map_estimate
 
 
-    def run_RotGPtransit_inference(self, pklpath, make_threadsafe=True):
+    def run_RotGPtransit_inference(self, pklpath, make_threadsafe=True,
+                                   map_optimization_method=None):
         """
         Fit light curve for an Agol+19 transit, + a GP for the stellar
         variability, simultaneously.  Assumes single instrument.  The GP is a
         RotationTerm (Prot and 0.5xProt) only.
+
+        map_optimization_method is by default None, which optimizes everything
+        simultaneously.  It can also be any "_"-separated combination of the
+        strings "transit", "gpJitterMean", "RotTerm", "LimbDark", "JitterMean",
+        "FullOptimize", and "bonus" ("SHOterm" is not in this model).  For
+        instance, "transit_gpJitterMean_FullOptimize" will attempt to optimize
+        the transit parameters, then all the RotTerm GP parameters + jitter and
+        mean, then all parameters simultaneously.  For a few tested cases,
+        'RotationTerm_transit_FullOptimize' was preferred.
 
         Fits for:
 
@@ -1029,8 +1040,9 @@ class ModelFitter(ModelParser):
                         p['sigma_rot'][1], p['sigma_rot'][2]
                     )
                 )
-                log_prot = pm.Normal("log_prot", mu=p['log_prot'][1],
-                                     sd=p['log_prot'][2])
+                log_prot = pm.Normal(
+                    "log_prot", mu=p['log_prot'][1], sd=p['log_prot'][2]
+                )
                 prot = pm.Deterministic("prot", tt.exp(log_prot))
                 log_Q0 = pm.Normal(
                     "log_Q0", mu=p['log_Q0'][1], sd=p['log_Q0'][2]
@@ -1173,58 +1185,76 @@ class ModelFitter(ModelParser):
 
                 map_soln = start
 
-                # # RotationTerm: sigma_rot, prot, log_Q0, log_dQ, f
-                # # NOTE: all five no bueno. NOTE: sigma_rot, f, prot seems OK.
-                # map_soln = pmx.optimize(
-                #     start=map_soln,
-                #     vars=[sigma_rot, f, prot]
-                # )
+                if map_optimization_method is not None:
 
-                # # SHO term: sigma, rho. Describes non-periodic variability.
-                # map_soln = pmx.optimize(
-                #     start=start,
-                #     vars=[sigma, rho]
-                # )
+                    steps = map_optimization_method.split("_")
+                    steps = [s for s in steps if 'then' not in s]
 
-                # Transit: [log_r, b, t0, period, r_star, logg_star, ecs,
-                # u_star]...]
-                map_soln = pmx.optimize(
-                    start=map_soln,
-                    vars=[log_r, b, ecc, omega, t0, period, r_star, logg_star,
-                          u_star]
-                )
+                    # Iterate over steps in the model. E.g., if
+                    # map_optimization_method is "RotationTerm_transit", then
+                    # optimization the RotationTerm first, then the transit.
+                    for s in steps:
 
+                        if s == 'transit':
+                            # Transit: [log_r, b, t0, period, r_star,
+                            # logg_star, ecs, u_star]...]
+                            map_soln = pmx.optimize(
+                                start=map_soln,
+                                vars=[log_r, b, ecc, omega, t0, period, r_star,
+                                      logg_star, u_star]
+                            )
 
-                # All GP terms + jitter and mean.
-                map_soln = pmx.optimize(
-                    start=map_soln,
-                    vars=[sigma_rot, prot, log_Q0, log_dQ, f,
-                          log_jitter, mean]
-                )
+                        if s == 'gpJitterMean':
+                            # All GP terms + jitter and mean.
+                            map_soln = pmx.optimize(
+                                start=map_soln,
+                                vars=[sigma_rot, prot, log_Q0, log_dQ, f,
+                                      log_jitter, mean]
+                            )
 
+                        if s == 'RotationTerm':
+                            # RotationTerm: sigma_rot, prot, log_Q0, log_dQ, f
+                            map_soln = pmx.optimize(
+                                start=map_soln,
+                                vars=[sigma_rot, f, prot, log_Q0, log_dQ]
+                            )
 
-                ## bonus
-                #map_soln = pmx.optimize(
-                #    start=map_soln,
-                #    vars=[log_r, b, log_Q0, log_dQ]
-                #)
+                        if s == 'SHOterm':
+                            raise NotImplementedError('No SHOterm in this model')
+                            # SHO term: sigma, rho. Describes non-periodic variability.
+                            map_soln = pmx.optimize(
+                                start=start,
+                                vars=[sigma, rho]
+                            )
 
+                        if s == 'bonus':
+                            # bonus
+                            map_soln = pmx.optimize(
+                                start=map_soln,
+                                vars=[log_r, b, log_Q0, log_dQ]
+                            )
 
-                # # Limb-darkening
-                # map_soln = pmx.optimize(
-                #     start=map_soln,
-                #     vars=[u0, u1]
-                # )
+                        if s == 'LimbDark':
+                            # Limb-darkening
+                            map_soln = pmx.optimize(
+                                start=map_soln,
+                                vars=[u0, u1]
+                            )
 
+                        if s == 'JitterMean':
+                            # Jitter and mean:
+                            map_soln = pmx.optimize(
+                                start=map_soln,
+                                vars=[log_jitter, mean]
+                            )
 
-                # # Jitter and mean:
-                # map_soln = pmx.optimize(
-                #     start=map_soln,
-                #     vars=[log_jitter, mean]
-                # )
+                        if s == 'FullOptimize':
+                            # Full optimization
+                            map_soln = pmx.optimize(start=map_soln)
 
-                # # Full optimization
-                map_soln = pmx.optimize(start=map_soln)
+                else:
+                    # By default, do full optimization
+                    map_soln = pmx.optimize(start=map_soln)
 
 
             return model, map_soln

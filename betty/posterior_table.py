@@ -260,6 +260,8 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
     df = df[selcols]
     df.index = latexs
 
+    df['ess_bulk'] = df.ess_bulk.astype(int)
+
     _outpath = outpath.replace('.tex', '_clean_table.csv')
     df.to_csv(_outpath, float_format='%.12f', na_rep='NaN')
     print(f'made {_outpath}')
