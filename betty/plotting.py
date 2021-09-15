@@ -21,6 +21,7 @@ from glob import glob
 import numpy as np, matplotlib.pyplot as plt, pandas as pd, pymc3 as pm
 import matplotlib as mpl
 from numpy import array as nparr
+from scipy.ndimage import gaussian_filter
 
 from aesthetic.plot import savefig, format_ax
 from aesthetic.plot import set_style
@@ -695,14 +696,14 @@ def plot_phased_light_curve(
 
     plt.close('all')
     set_style()
-    fig = plt.figure(figsize=(4,3))
+    fig = plt.figure(figsize=(5,3))
     axd = fig.subplot_mosaic(
         """
         A
         B
         """,
         gridspec_kw={
-            "height_ratios": [3,1]
+            "height_ratios": [3,1.5]
         }
     )
 
@@ -787,8 +788,8 @@ def plot_phased_light_curve(
 
     if from_trace==True:
         art = ax.fill_between(
-            24*lc_modx, 1e3*lc_mod_lo, 1e3*lc_mod_hi, color="C4", alpha=0.5,
-            zorder=1000
+            24*lc_modx, 1e3*lc_mod_lo, 1e3*lc_mod_hi, color="C4",
+            alpha=0.5, zorder=1000
         )
         art.set_edgecolor("none")
 
@@ -823,9 +824,12 @@ def plot_phased_light_curve(
     ax.axhline(0, color="C4", lw=1, ls='-', zorder=1000)
 
     if from_trace==True:
+        sigma = 20
+        print(f'WRN! Smoothing plotted by by sigma={sigma}')
+        _g =  lambda a: gaussian_filter(a, sigma=sigma)
         art = ax.fill_between(
-            24*lc_modx, 1e3*(lc_mod_hi-lc_mody), 1e3*(lc_mod_lo-lc_mody), color="C4", alpha=0.5,
-            zorder=1000
+            24*lc_modx, 1e3*_g(lc_mod_hi-lc_mody), 1e3*_g(lc_mod_lo-lc_mody),
+            color="C4", alpha=0.5, zorder=1000
         )
         art.set_edgecolor("none")
 
@@ -1098,7 +1102,10 @@ def plot_phased_subsets(
         #     _y = 1e3*(y[mask] - gp_mod - lc_mod)
         #     axd['B'].set_ylim(get_ylimguess(_y))
 
-        format_ax(a)
+        a.set_xticklabels(fontsize='medium')
+        a.set_yticklabels(fontsize='medium')
+
+        #format_ax(a)
 
     # # NOTE: hacky approach: override it as the stddev of the residuals. This is
     # # dangerous, b/c if the errors are totally wrong, you might not know.
