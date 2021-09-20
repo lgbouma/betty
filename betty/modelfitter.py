@@ -1581,10 +1581,16 @@ class ModelFitter(ModelParser):
         if make_threadsafe:
             pass
         else:
-            # NOTE: would usually plot MAP estimate here, but really
-            # there's not a huge need.
             print(map_estimate)
             pass
+
+        from betty import plotting as bp
+
+        outpath = os.path.join(
+            self.PLOTDIR,
+            'multicolorflux_vs_time_map_estimate_QuadMulticolorTransit.png'
+        )
+        bp.plot_multicolorlight_curve(self.data, map_estimate, outpath)
 
         with model:
             trace = pmx.sample(

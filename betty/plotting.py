@@ -8,6 +8,7 @@ Post-fit plots:
 
 MAP plots:
     plot_light_curve
+    plot_multicolorlight_curve
     plot_phased_light_curve
     plot_phased_subsets
 
@@ -628,6 +629,67 @@ def plot_light_curve(data, soln, outpath, mask=None):
     ax.set_ylabel("residuals")
     ax.set_xlim(x[mask].min(), x[mask].max())
     ax.set_xlabel("time [days]")
+
+    fig.tight_layout()
+
+    savefig(fig, outpath, dpi=350)
+
+
+BPCOLORDICT = {
+    'g': 'blue',
+    'r': 'green',
+    'i': 'orange',
+    'z': 'red'
+}
+
+def plot_multicolorlight_curve(data, soln, outpath, mask=None):
+
+    plt.close('all')
+    set_style()
+    fig, ax = plt.subplots(1, 1, figsize=(4,3))
+
+    shift = 0
+    delta = 0.007 # might need to tune
+
+    for n, (name, (x, y, yerr, texp)) in enumerate(data.items()):
+
+        if 'muscat3' in name:
+            bp = name.split("_")[-1]
+            c = BPCOLORDICT[bp]
+        else:
+            raise NotImplementedError('How are line colors given?')
+
+        _time, _flux = nparr(x), nparr(y)
+
+        bintime = 600
+        bd = time_bin_magseries(_time, _flux, binsize=bintime, minbinelems=2)
+        _bintime, _binflux = bd['binnedtimes'], bd['binnedmags']
+
+        ax.scatter(_time,
+                   _flux - shift,
+                   c='darkgray', zorder=3, s=7, rasterized=False,
+                   linewidths=0, alpha=0.5)
+
+        ax.scatter(_bintime,
+                   _binflux - shift,
+                   c=c, zorder=4, s=18, rasterized=False,
+                   linewidths=0)
+
+        mod = soln[f"{name}_mu_transit"]
+        ax.plot(x, mod - shift, color=c, zorder=41, lw=0.5)
+
+        props = dict(boxstyle='square', facecolor='white', alpha=0.7, pad=0.15,
+                     linewidth=0)
+        txt = f'{bp}-band'
+        ax.text(np.nanpercentile(_time, 1), 2e-3 + np.nanmedian(_flux) - shift,
+                txt, ha='left', va='top', bbox=props, zorder=6, color=c,
+                fontsize='x-small')
+
+        shift += delta
+
+    #ax.legend(fontsize=10)
+    ax.set_ylabel(f'Relative flux')
+    ax.set_xlabel(f'BJDTDB')
 
     fig.tight_layout()
 
