@@ -79,7 +79,7 @@ def test_simpletransit(starid='WASP_4', N_samples=1000):
 
     m = ModelFitter(modelid, datasets, priordict, plotdir=TESTRESULTSDIR,
                     pklpath=pklpath, overwrite=0, N_samples=N_samples,
-                    N_cores=os.cpu_count(), target_accept=0.8)
+                    N_cores=os.cpu_count())
 
     print(pm.summary(m.trace, var_names=list(priordict)))
 
