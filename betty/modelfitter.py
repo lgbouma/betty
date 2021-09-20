@@ -1370,11 +1370,6 @@ class ModelFitter(ModelParser):
                     "rho_star", factor*10**logg_star / r_star
                 )
 
-                # limb-darkening. adopt uniform, rather than Kipping 2013 -- i.e., take
-                # an "informed prior" approach. also, fix across bandpasses,
-                # which is kind of incorrect.
-                u_star = xo.QuadLimbDark("u_star")
-
                 # fix Rp/Rs across bandpasses
                 log_r = pm.Uniform('log_r', lower=p['log_r'][1],
                                    upper=p['log_r'][2], testval=p['log_r'][3])
@@ -1403,7 +1398,9 @@ class ModelFitter(ModelParser):
 
                 # NOTE: this might need to be in the below loop, should you
                 # decide to flex the "fixed limb darkening" assumption.
-                star = xo.LimbDarkLightCurve(u_star)
+
+                # u_star = xo.QuadLimbDark("u_star")
+                # star = xo.LimbDarkLightCurve(u_star)
 
                 # Loop over "instruments" (TESS, then each ground-based lightcurve)
                 lc_models = dict()
@@ -1418,6 +1415,9 @@ class ModelFitter(ModelParser):
                     # need to prefix the names. Yields e.g., "TESS_mean",
                     # "elsauce_0_mean", "elsauce_2_a2", "muscat3_i_a1", etc.
                     with pm.Model(name=name, model=model):
+
+                        u_star = xo.QuadLimbDark(f"{name}_u_star")
+                        star = xo.LimbDarkLightCurve(u_star)
 
                         # Transit parameters.
                         mean = pm.Normal(
