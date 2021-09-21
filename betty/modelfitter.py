@@ -7,6 +7,7 @@ ModelFitter
     run_RotStochGPtransit_inference
     run_RotGPtransit_inference
     run_QuadMulticolorTransit_inference
+    run_QuadMulticolorVaryDepthTransit_inference
     run_rvspotorbit_inference
 
 Not yet implemented here (but see /timmy/):
@@ -46,7 +47,8 @@ class ModelParser:
 
         validcomponents = ['simpletransit', 'rvspotorbit', 'RotStochGPtransit',
                            'RotGPtransit', 'allindivtransit', 'alltransit',
-                           'QuadMulticolorTransit']
+                           'QuadMulticolorTransit',
+                           'QuadMulticolorVaryDepthTransit']
 
         assert len(self.modelcomponents) >= 1
 
@@ -78,7 +80,9 @@ class ModelFitter(ModelParser):
         implemented_models = [
             'simpletransit', 'allindivtransit', 'oddindivtransit',
             'evenindivtransit', 'rvorbit', 'rvspotorbit', 'alltransit',
-            'RotStochGPtransit', 'RotGPtransit', 'QuadMulticolorTransit'
+            'RotStochGPtransit', 'RotGPtransit',
+            'QuadMulticolorTransit',
+            'QuadMulticolorVaryDepthTransit'
         ]
 
         if modelid in implemented_models:
@@ -114,6 +118,13 @@ class ModelFitter(ModelParser):
         elif modelid == 'QuadMulticolorTransit':
             print(f'Beginning PyMC3 run for {modelid}...')
             self.run_QuadMulticolorTransit_inference(
+                pklpath, make_threadsafe=make_threadsafe
+            )
+            print(f'Finished PyMC3 for {modelid}...')
+
+        elif modelid == 'QuadMulticolorVaryDepthTransit':
+            print(f'Beginning PyMC3 run for {modelid}...')
+            self.run_QuadMulticolorVaryDepthTransit_inference(
                 pklpath, make_threadsafe=make_threadsafe
             )
             print(f'Finished PyMC3 for {modelid}...')
@@ -1323,18 +1334,15 @@ class ModelFitter(ModelParser):
                                             map_optimization_method=None):
         """
         Fit a single transit + quadratic trend with multiple simultaneous bandpasses
-        (presumably a ground-based transit). MUSCAT observations are a common example.
+        (presumably a ground-based transit).
 
         Fits for:
             [ {instrument}_mean, {instrument}_a1, {instrument}_a2,
-            {instrument}_log_jitter,
-            b, period, t0, log_r, u[1], u[0], r_star, logg_star]
+            {instrument}_log_jitter, {instrument}_u_star,
+            b, period, t0, log_r, r_star, logg_star]
 
         where {instrument} iterates over whatever different instruments are in
-        `self.data`.
-
-        Note: assuming constant limb-darkening is probably a bad idea.  Letting
-        it float between bandpasses would be better justified.
+        `self.data` (e.g., "muscat_i", "muscat_z", etc.).
         """
 
         p = self.priordict
@@ -1396,9 +1404,8 @@ class ModelFitter(ModelParser):
                     r_star=r_star
                 )
 
-                # NOTE: this might need to be in the below loop, should you
-                # decide to flex the "fixed limb darkening" assumption.
-
+                # NOTE: this would be if you fixed LD over all
+                # bandpasses
                 # u_star = xo.QuadLimbDark("u_star")
                 # star = xo.LimbDarkLightCurve(u_star)
 
@@ -1416,6 +1423,7 @@ class ModelFitter(ModelParser):
                     # "elsauce_0_mean", "elsauce_2_a2", "muscat3_i_a1", etc.
                     with pm.Model(name=name, model=model):
 
+                        # Each bandpass gets its own LD.
                         u_star = xo.QuadLimbDark(f"{name}_u_star")
                         star = xo.LimbDarkLightCurve(u_star)
 
@@ -1589,6 +1597,296 @@ class ModelFitter(ModelParser):
         outpath = os.path.join(
             self.PLOTDIR,
             'multicolorflux_vs_time_map_estimate_QuadMulticolorTransit.png'
+        )
+        bp.plot_multicolorlight_curve(self.data, map_estimate, outpath)
+
+        with model:
+            trace = pmx.sample(
+                tune=self.N_samples, draws=self.N_samples,
+                start=map_estimate, cores=self.N_cores,
+                chains=self.N_chains,
+                return_inferencedata=True,
+                initial_accept=0.8,
+                target_accept=0.95
+            )
+
+        with open(pklpath, 'wb') as buff:
+            pickle.dump({'model': model, 'trace': trace,
+                         'map_estimate': map_estimate}, buff)
+
+        self.model = model
+        self.trace = trace
+        self.map_estimate = map_estimate
+
+
+    def run_QuadMulticolorVaryDepthTransit_inference(self, pklpath,
+                                                     make_threadsafe=True,
+                                                     map_optimization_method=None):
+        """
+        Fit a single transit + quadratic trend with multiple
+        simultaneous bandpasses.  Let transit depths vary.
+
+        Fits for:
+            [ {instrument}_mean, {instrument}_a1, {instrument}_a2,
+            {instrument}_log_jitter, {instrument}_log_r,
+            {instrument}_u_star, b, period, t0, r_star, logg_star]
+
+        where {instrument} iterates over whatever different instruments are in
+        `self.data` (e.g., "muscat_i", "muscat_z", etc.).
+        """
+
+        p = self.priordict
+
+        # if the model has already been run, pull the result from the
+        # pickle. otherwise, run it.
+        if os.path.exists(pklpath):
+            d = pickle.load(open(pklpath, 'rb'))
+            self.model = d['model']
+            self.trace = d['trace']
+            self.map_estimate = d['map_estimate']
+            return 1
+
+        def build_model(mask=None, start=None):
+
+            # allowing multiple instruments
+            names = list(self.data.keys())
+            nplanets = 1
+
+            with pm.Model() as model:
+
+                # Shared parameters
+
+                # Stellar parameters.
+                logg_star = pm.Normal(
+                    "logg_star", mu=p['logg_star'][1], sd=p['logg_star'][2]
+                )
+
+                r_star = pm.Bound(pm.Normal, lower=0.0)(
+                    "r_star", mu=p['r_star'][1], sd=p['r_star'][2]
+                )
+                rho_star = pm.Deterministic(
+                    "rho_star", factor*10**logg_star / r_star
+                )
+
+                # orbital parameters for planet (single)
+                t0 = pm.Normal(
+                    "t0", mu=p['t0'][1], sd=p['t0'][2], testval=p['t0'][1]
+                )
+                period = pm.Normal(
+                    'period', mu=p['period'][1], sd=p['period'][2],
+                    testval=p['period'][1]
+                )
+
+                # NOTE: this is technically incorrect, U[0,1+Rp/Rs] is
+                # better.  However in this model Rp is defined per
+                # bandpass, which makes the usual correct impact
+                # parameter distribution not usable. Here, we use the
+                # fact that we already know the planet is not grazing.
+                b = pm.Uniform('b', lower=p['b'][1], upper=p['b'][2],
+                               testval=p['b'][3])
+
+                # orbit model.  assume zero eccentricity orbit.
+                orbit = xo.orbits.KeplerianOrbit(
+                    period=period,
+                    t0=t0,
+                    b=b,
+                    rho_star=rho_star,
+                    r_star=r_star
+                )
+
+                # Loop over "instruments" (TESS, then each ground-based lightcurve)
+                lc_models = dict()
+                roughdepths = dict()
+
+                for n, (name, (x, y, yerr, texp)) in enumerate(self.data.items()):
+
+                    #if mask is None:
+                    #    mask = np.ones(len(x), dtype=bool)
+
+                    # Define per-instrument parameters in a submodel, to not
+                    # need to prefix the names. Yields e.g., "TESS_mean",
+                    # "elsauce_0_mean", "elsauce_2_a2", "muscat3_i_a1", etc.
+                    with pm.Model(name=name, model=model):
+
+                        u_star = xo.QuadLimbDark(f"{name}_u_star")
+                        star = xo.LimbDarkLightCurve(u_star)
+
+                        # let Rp/Rs float across bandpasses
+                        log_r = pm.Uniform(f'{name}_log_r',
+                                           lower=p[f'{name}_log_r'][1],
+                                           upper=p[f'{name}_log_r'][2],
+                                           testval=p[f'{name}_log_r'][3])
+                        r = pm.Deterministic(f'{name}_r', tt.exp(log_r))
+                        # planet radius in jupiter radii
+                        r_planet = pm.Deterministic(
+                            f"{name}_r_planet", (r*r_star)*( 1*units.Rsun/(1*units.Rjup) ).cgs.value
+                        )
+
+                        # Transit parameters.
+                        mean = pm.Normal(
+                            "mean", mu=p[f'{name}_mean'][1],
+                            sd=p[f'{name}_mean'][2], testval=p[f'{name}_mean'][1]
+                        )
+
+                        # units: rel flux per day.
+                        a1 = pm.Uniform(
+                            "a1",
+                            lower=p[f'{name}_a1'][1],
+                            upper=p[f'{name}_a1'][2],
+                            testval=p[f'{name}_a1'][3]
+                        )
+                        # units: rel flux per day^2.
+                        a2 = pm.Uniform(
+                            "a2",
+                            lower=p[f'{name}_a2'][1],
+                            upper=p[f'{name}_a2'][2],
+                            testval=p[f'{name}_a2'][3]
+                        )
+
+                        # A jitter term describing excess white noise
+                        log_jitter = pm.Normal(
+                            f"{name}_log_jitter", mu=np.log(np.mean(yerr)),
+                            sd=p[f'{name}_log_jitter'][2]
+                        )
+
+                        # midpoint for this definition of the quadratic trend
+                        _tmid = np.nanmedian(x)
+                        lc_models[name] = pm.Deterministic(
+                            f'{name}_mu_transit',
+                            mean +
+                            a1*(x-_tmid) +
+                            a2*(x-_tmid)**2 +
+                            star.get_light_curve(
+                                orbit=orbit, r=r, t=x, texp=texp
+                            ).T.flatten()
+                        )
+
+                        # NOTE: some boilerplate below to give an idea for how one
+                        # might go about varying the transit depth.
+
+                        # elif self.modelid == 'alltransit_quaddepthvar':
+                        #     if name != 'tess':
+                        #         # midpoint for this definition of the quadratic trend
+                        #         _tmid = np.nanmedian(x)
+
+                        #         raise NotImplementedError('boilerplate')
+
+                        #         # do custom depth-to-
+                        #         if (name == 'elsauce_20200401' or
+                        #             name == 'elsauce_20200426'
+                        #         ):
+                        #             r = r_Rband
+                        #         elif name == 'elsauce_20200521':
+                        #             r = r_Tband
+                        #         elif name == 'elsauce_20200614':
+                        #             r = r_Bband
+
+                        #         transit_lc = star.get_light_curve(
+                        #             orbit=orbit, r=r, t=x, texp=texp
+                        #         ).T.flatten()
+
+                        #         lc_models[name] = pm.Deterministic(
+                        #             f'{name}_mu_transit',
+                        #             mean +
+                        #             a1*(x-_tmid) +
+                        #             a2*(x-_tmid)**2 +
+                        #             transit_lc
+                        #         )
+
+                        #         roughdepths[name] = pm.Deterministic(
+                        #             f'{name}_roughdepth',
+                        #             pm.math.abs_(transit_lc).max()
+                        #         )
+
+                        # NOTE: end boilerplate
+
+                    likelihood = pm.Normal(
+                        f'{name}_obs', mu=lc_models[name],
+                        sigma=pm.math.sqrt(
+                            yerr**2 + tt.exp(2 * log_jitter)
+                        ),
+                        observed=y
+                    )
+
+                #
+                # Derived parameters
+                #
+
+                #
+                # eq 30 of winn+2010, ignoring planet density.
+                #
+                a_Rs = pm.Deterministic(
+                    "a_Rs",
+                    (rho_star * period**2)**(1/3)
+                    *
+                    (( (1*units.gram/(1*units.cm)**3) * (1*units.day**2)
+                      * const.G / (3*np.pi)
+                    )**(1/3)).cgs.value
+                )
+
+                #
+                # cosi. assumes e=0 (e.g., Winn+2010 eq 7)
+                #
+                cosi = pm.Deterministic("cosi", b / a_Rs)
+
+                # probably safer than tt.arccos(cosi)
+                sini = pm.Deterministic("sini", pm.math.sqrt( 1 - cosi**2 ))
+
+                #
+                # transit durations (T_14, T_13) for circular orbits. Winn+2010 Eq 14, 15.
+                # units: hours.
+                #
+                T_14 = pm.Deterministic(
+                    'T_14',
+                    (period/np.pi)*
+                    tt.arcsin(
+                        (1/a_Rs) * pm.math.sqrt( (1+r)**2 - b**2 )
+                        * (1/sini)
+                    )*24
+                )
+
+                T_13 =  pm.Deterministic(
+                    'T_13',
+                    (period/np.pi)*
+                    tt.arcsin(
+                        (1/a_Rs) * pm.math.sqrt( (1-r)**2 - b**2 )
+                        * (1/sini)
+                    )*24
+                )
+
+                # Optimizing
+                np.random.seed(42)
+                if start is None:
+                    start = model.test_point
+
+                map_soln = start
+
+                if map_optimization_method is not None:
+
+                    steps = map_optimization_method.split("_")
+                    steps = [s for s in steps if 'then' not in s]
+
+                    raise NotImplementedError('Need to tune this model')
+
+                else:
+                    # By default, do full optimization
+                    map_soln = pmx.optimize(start=map_soln)
+
+            return model, map_soln
+
+        model, map_estimate = build_model()
+
+        if make_threadsafe:
+            pass
+        else:
+            print(map_estimate)
+            pass
+
+        from betty import plotting as bp
+
+        outpath = os.path.join(
+            self.PLOTDIR,
+            'multicolorflux_vs_time_map_estimate_QuadMulticolorVaryDepthTransit.png'
         )
         bp.plot_multicolorlight_curve(self.data, map_estimate, outpath)
 
