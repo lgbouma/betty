@@ -749,6 +749,11 @@ def plot_phased_light_curve(
 
     """
 
+    if not fullxlim:
+        scale_x = lambda x: x*24
+    else:
+        scale_x = lambda x: x
+
     assert len(data.keys()) == 1
     name = list(data.keys())[0]
     x,y,yerr,texp = data[name]
@@ -758,14 +763,14 @@ def plot_phased_light_curve(
 
     plt.close('all')
     set_style()
-    fig = plt.figure(figsize=(5,3))
+    fig = plt.figure(figsize=(0.66*5,0.66*6))
     axd = fig.subplot_mosaic(
         """
         A
         B
         """,
         gridspec_kw={
-            "height_ratios": [3,1.5]
+            "height_ratios": [1,1]
         }
     )
 
@@ -831,76 +836,79 @@ def plot_phased_light_curve(
     #
     ax = axd['A']
 
-    ax.errorbar(24*x_fold[mask], 1e3*(y[mask]-gp_mod), yerr=1e3*_yerr,
+    ax.errorbar(scale_x(x_fold[mask]), 1e3*(y[mask]-gp_mod), yerr=1e3*_yerr,
                 color="darkgray", label="data", fmt='.', elinewidth=0.2,
-                capsize=0, markersize=1, rasterized=True)
+                capsize=0, markersize=1, rasterized=True, zorder=-1)
 
     binsize_days = (binsize_minutes / (60*24))
     orb_bd = phase_bin_magseries(
         x_fold[mask], y[mask]-gp_mod, binsize=binsize_days, minbinelems=3
     )
     ax.scatter(
-        orb_bd['binnedphases']*24, 1e3*(orb_bd['binnedmags']), color='k',
+        scale_x(orb_bd['binnedphases']), 1e3*(orb_bd['binnedmags']), color='k',
         s=BINMS,
         alpha=1, zorder=1002#, linewidths=0.2, edgecolors='white'
     )
 
-    ax.plot(24*lc_modx, 1e3*lc_mody, color="C4", label="transit model",
+    ax.plot(scale_x(lc_modx), 1e3*lc_mody, color="C4", label="transit model",
             lw=1, zorder=1001, alpha=1)
 
     if from_trace==True:
         art = ax.fill_between(
-            24*lc_modx, 1e3*lc_mod_lo, 1e3*lc_mod_hi, color="C4",
+            scale_x(lc_modx), 1e3*lc_mod_lo, 1e3*lc_mod_hi, color="C4",
             alpha=0.5, zorder=1000
         )
         art.set_edgecolor("none")
 
-    # show representative binned error
-    _e = 1e3*np.nanmean(_yerr)
+    # # show representative binned error
+    # _e = 1e3*np.nanmean(_yerr)
+    # # bigger bin size by 2x cadence improves uncertainty by sqrt(2).
+    # texp_factor = texp/binsize_days
+    # N_periods_observed = (np.max(x)-np.min(x))/_per
+    # duty_cycle_fudge = 0.8 # rough estimate for TESS/Kepler
+    # errorfactor = 1/( (texp_factor*duty_cycle_fudge*N_periods_observed)**(1/2) )
+    # binned_err = errorfactor*_e
 
-    # bigger bin size by 2x cadence improves uncertainty by sqrt(2).
-    texp_factor = texp/binsize_days
-    N_periods_observed = (np.max(x)-np.min(x))/_per
-    duty_cycle_fudge = 0.8 # rough estimate for TESS/Kepler
-    errorfactor = 1/( (texp_factor*duty_cycle_fudge*N_periods_observed)**(1/2) )
-
-    binned_err = errorfactor*_e
-
-    ax.set_ylabel("Relative flux [ppt]")
     ax.set_xticklabels([])
 
     # residual axis
     ax = axd['B']
-    ax.errorbar(24*x_fold[mask], 1e3*(y[mask] - gp_mod - lc_mod), yerr=1e3*_yerr,
-                color="darkgray", fmt='.', elinewidth=0.2, capsize=0,
-                markersize=1, rasterized=True)
+    #ax.errorbar(24*x_fold[mask], 1e3*(y[mask] - gp_mod - lc_mod), yerr=1e3*_yerr,
+    #            color="darkgray", fmt='.', elinewidth=0.2, capsize=0,
+    #            markersize=1, rasterized=True)
 
     binsize_days = (binsize_minutes / (60*24))
     orb_bd = phase_bin_magseries(
         x_fold[mask], y[mask]-gp_mod-lc_mod, binsize=binsize_days, minbinelems=3
     )
     ax.scatter(
-        orb_bd['binnedphases']*24, 1e3*(orb_bd['binnedmags']), color='k',
+        scale_x(orb_bd['binnedphases']), 1e3*(orb_bd['binnedmags']), color='k',
         s=BINMS, alpha=1, zorder=1002#, linewidths=0.2, edgecolors='white'
     )
     ax.axhline(0, color="C4", lw=1, ls='-', zorder=1000)
 
     if from_trace==True:
-        sigma = 20
+        sigma = 30
         print(f'WRN! Smoothing plotted by by sigma={sigma}')
         _g =  lambda a: gaussian_filter(a, sigma=sigma)
         art = ax.fill_between(
-            24*lc_modx, 1e3*_g(lc_mod_hi-lc_mody), 1e3*_g(lc_mod_lo-lc_mody),
+            scale_x(lc_modx), 1e3*_g(lc_mod_hi-lc_mody), 1e3*_g(lc_mod_lo-lc_mody),
             color="C4", alpha=0.5, zorder=1000
         )
         art.set_edgecolor("none")
 
     ax.set_xlabel("Hours from mid-transit")
-    ax.set_ylabel("Residual")
+    if fullxlim:
+        ax.set_xlabel("Days from mid-transit")
+
+    fig.text(-0.01,0.5, 'Relative flux [ppt]', va='center',
+             rotation=90)
 
     for k,a in axd.items():
         if not fullxlim:
             a.set_xlim(-0.4*24,0.4*24)
+        else:
+            a.set_xlim(-_per/2,_per/2)
         if isinstance(ylimd, dict):
             a.set_ylim(ylimd[k])
         else:
@@ -912,20 +920,26 @@ def plot_phased_light_curve(
 
         format_ax(a)
 
-    # NOTE: hacky approach: override it as the stddev of the residuals. This is
+    # NOTE: alt approach: override it as the stddev of the residuals. This is
     # dangerous, b/c if the errors are totally wrong, you might not know.
     if do_hacky_reprerror:
-        print('WRN! Overriding binned unc as the residuals')
-        binned_err = np.nanstd(1e3*(orb_bd['binnedmags']))
+        sel = np.abs(orb_bd['binnedphases']*24)>3 # at least 3 hours from mid-transit
+        binned_err = 1e3*np.nanstd((orb_bd['binnedmags'][sel]))
+        print(f'WRN! Overriding binned unc as the residuals. Binned_err = {binned_err:.4f} ppt')
+        #print(f'{_e:.2f}, {errorfactor*_e:.2f}')
 
+    _x,_y = 0.8*max(axd['A'].get_xlim()), 0.7*min(axd['A'].get_ylim())
     axd['A'].errorbar(
-        0.9, 0.1, yerr=binned_err,
-        fmt='none', ecolor='black', alpha=1, elinewidth=1, capsize=2,
-        transform=axd['A'].transAxes
+        _x, _y, yerr=binned_err,
+        fmt='none', ecolor='black', alpha=1, elinewidth=0.5, capsize=2,
+        markeredgewidth=0.5
     )
-
-    print(f'{_e:.2f}, {errorfactor*_e:.2f}')
-
+    _x,_y = 0.8*max(axd['B'].get_xlim()), 0.6*min(axd['B'].get_ylim())
+    axd['B'].errorbar(
+        _x, _y, yerr=binned_err,
+        fmt='none', ecolor='black', alpha=1, elinewidth=0.5, capsize=2,
+        markeredgewidth=0.5
+    )
 
     fig.tight_layout()
 
