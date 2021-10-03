@@ -26,8 +26,10 @@ def flatten_starspots(time, flux, flux_err, p_rotation, flare_iterate=False):
     Given time, flux, flux_error, and rotation period estimate, perform an
     iterative fitting procedure to detrend the rotation signal.
 
-    Step 1. Build a two-term mixed SHOTerm GP model with quasi-periodic kernels
-    at Prot and 0.5$\times$Prot. Fit it.
+    Returns: `flat_flux`, `trend_flux`, `mask`
+
+    Step 1. Build a two-term mixed SHOTerm GP model (aka "RotationTerm") with
+    quasi-periodic kernels at Prot and 0.5$\times$Prot. Fit it.
 
     Step 2.  Select points more than twice the median absolute
     deviation from the residual, and exclude them.  Repeat Step 1.
@@ -147,4 +149,4 @@ def flatten_starspots(time, flux, flux_err, p_rotation, flare_iterate=False):
     trend_flux = map_soln1['pred']
     flat_flux = flux/trend_flux
 
-    return flat_flux, trend_flux
+    return flat_flux, trend_flux, mask
