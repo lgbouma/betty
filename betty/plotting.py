@@ -712,7 +712,6 @@ def doublepctile(x, SIGMA=[2.5,97.5]):
         SIGMA, axis=0
     )
 
-
 def get_ylimguess(y):
 
     ylow = np.nanpercentile(y, 0.1)
@@ -726,7 +725,7 @@ def get_ylimguess(y):
 def plot_phased_light_curve(
     data, soln, outpath, mask=None, from_trace=False,
     ylimd=None, binsize_minutes=20, map_estimate=None, fullxlim=False, BINMS=3,
-    do_hacky_reprerror=False, rebinthemodel=False
+    do_hacky_reprerror=False
 ):
     """
     Args:
@@ -741,9 +740,6 @@ def plot_phased_light_curve(
         outpath (str): where to save the output.
 
         from_trace: True is using m.trace.posterior
-
-        rebinthemodel: Re-binning the model has to do with the point
-        that if you bin the data, you must also bin the model.
 
     Optional:
 
@@ -860,41 +856,15 @@ def plot_phased_light_curve(
         alpha=1, zorder=1002#, linewidths=0.2, edgecolors='white'
     )
 
-    if not rebinthemodel:
-        ax.plot(scale_x(lc_modx), 1e3*lc_mody, color="C4", label="transit model",
-                lw=1, zorder=1001, alpha=1)
-
-    elif rebinthemodel:
-        mod_bd = phase_bin_magseries(
-            lc_modx, lc_mody, binsize=binsize_days, minbinelems=3
-        )
-        ax.plot(scale_x(mod_bd['binnedphases']),
-                1e3*(mod_bd['binnedmags']), color="C4",
-                label="transit model", lw=1, zorder=1001, alpha=1)
-
+    ax.plot(scale_x(lc_modx), 1e3*lc_mody, color="C4", label="transit model",
+            lw=1, zorder=1001, alpha=1)
 
     if from_trace==True:
-        if not rebinthemodel:
-            art = ax.fill_between(
-                scale_x(lc_modx), 1e3*lc_mod_lo, 1e3*lc_mod_hi, color="C4",
-                alpha=0.5, zorder=1000
-            )
-            art.set_edgecolor("none")
-        else:
-            mod_bd_lo = phase_bin_magseries(
-                lc_modx, lc_mod_lo, binsize=binsize_days, minbinelems=3
-            )
-            mod_bd_hi = phase_bin_magseries(
-                lc_modx, lc_mod_hi, binsize=binsize_days, minbinelems=3
-            )
-            art = ax.fill_between(
-                scale_x(mod_bd_lo['binnedphases']),
-                1e3*(mod_bd_lo['binnedmags']),
-                1e3*(mod_bd_hi['binnedmags']),
-                color="C4", alpha=0.5, zorder=1000
-            )
-            art.set_edgecolor("none")
-
+        art = ax.fill_between(
+            scale_x(lc_modx), 1e3*lc_mod_lo, 1e3*lc_mod_hi, color="C4",
+            alpha=0.5, zorder=1000
+        )
+        art.set_edgecolor("none")
 
     # # show representative binned error
     # _e = 1e3*np.nanmean(_yerr)
@@ -924,23 +894,14 @@ def plot_phased_light_curve(
     ax.axhline(0, color="C4", lw=1, ls='-', zorder=1000)
 
     if from_trace==True:
-        if not rebinthemodel:
-            sigma = 30
-            print(f'WRN! Smoothing plotted by by sigma={sigma}')
-            _g =  lambda a: gaussian_filter(a, sigma=sigma)
-            art = ax.fill_between(
-                scale_x(lc_modx), 1e3*_g(lc_mod_hi-lc_mody), 1e3*_g(lc_mod_lo-lc_mody),
-                color="C4", alpha=0.5, zorder=1000
-            )
-            art.set_edgecolor("none")
-        else:
-            art = ax.fill_between(
-                scale_x(mod_bd_lo['binnedphases']),
-                1e3*(mod_bd_hi['binnedmags'] - mod_bd['binnedmags']),
-                1e3*(mod_bd['binnedmags'] - mod_bd_lo['binnedmags']),
-                color="C4", alpha=0.5, zorder=1000
-            )
-            art.set_edgecolor("none")
+        sigma = 30
+        print(f'WRN! Smoothing plotted by by sigma={sigma}')
+        _g =  lambda a: gaussian_filter(a, sigma=sigma)
+        art = ax.fill_between(
+            scale_x(lc_modx), 1e3*_g(lc_mod_hi-lc_mody), 1e3*_g(lc_mod_lo-lc_mody),
+            color="C4", alpha=0.5, zorder=1000
+        )
+        art.set_edgecolor("none")
 
     ax.set_xlabel("Hours from mid-transit")
     if fullxlim:
