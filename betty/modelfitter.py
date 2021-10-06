@@ -171,7 +171,7 @@ class ModelFitter(ModelParser):
         """
         Fit transit data for an Agol+19 transit. (Ignores any stellar
         variability; believes error bars).  Free parameters are {"period",
-        "t0", "r", "b", "u0", "u1"}.
+        "t0", "log_ror", "b", "u0", "u1"}.
         """
 
         p = self.priordict
@@ -202,12 +202,15 @@ class ModelFitter(ModelParser):
             )
 
             # fix Rp/Rs across bandpasses
-            if p['log_r'][0] == 'Uniform':
-                log_r = pm.Uniform('log_r', lower=p['log_r'][1],
-                                   upper=p['log_r'][2], testval=p['log_r'][3])
+            if p['log_ror'][0] == 'Uniform':
+                log_ror = pm.Uniform('log_ror', lower=p['log_ror'][1],
+                                   upper=p['log_ror'][2], testval=p['log_ror'][3])
             else:
                 raise NotImplementedError
-            r = pm.Deterministic('r', tt.exp(log_r))
+            ror = pm.Deterministic('ror', tt.exp(log_ror))
+            r_pl = pm.Deterministic(
+                "r_pl", ror*r_star
+            )
 
             # Some orbital parameters
             t0 = pm.Normal(
@@ -218,7 +221,7 @@ class ModelFitter(ModelParser):
                 testval=p['period'][1]
             )
             b = xo.distributions.ImpactParameter(
-                "b", ror=r, testval=p['b'][1]
+                "b", ror=ror, testval=p['b'][1]
             )
 
             orbit = xo.orbits.KeplerianOrbit(
@@ -261,7 +264,7 @@ class ModelFitter(ModelParser):
 
                 if self.modelid == 'simpletransit':
                     transit_lc = star.get_light_curve(
-                        orbit=orbit, r=r, t=x, texp=texp
+                        orbit=orbit, r=r_pl, t=x, texp=texp
                     ).T.flatten()
 
                     lc_models[name] = pm.Deterministic(
@@ -290,7 +293,7 @@ class ModelFitter(ModelParser):
 
             # planet radius in jupiter radii
             r_planet = pm.Deterministic(
-                "r_planet", (r*r_star)*( 1*units.Rsun/(1*units.Rjup) ).cgs.value
+                "r_planet", (ror*r_star)*( 1*units.Rsun/(1*units.Rjup) ).cgs.value
             )
 
             #
@@ -321,7 +324,7 @@ class ModelFitter(ModelParser):
                 'T_14',
                 (period/np.pi)*
                 tt.arcsin(
-                    (1/a_Rs) * pm.math.sqrt( (1+r)**2 - b**2 )
+                    (1/a_Rs) * pm.math.sqrt( (1+ror)**2 - b**2 )
                     * (1/sini)
                 )*24
             )
@@ -330,7 +333,7 @@ class ModelFitter(ModelParser):
                 'T_13',
                 (period/np.pi)*
                 tt.arcsin(
-                    (1/a_Rs) * pm.math.sqrt( (1-r)**2 - b**2 )
+                    (1/a_Rs) * pm.math.sqrt( (1-ror)**2 - b**2 )
                     * (1/sini)
                 )*24
             )
@@ -341,7 +344,7 @@ class ModelFitter(ModelParser):
             # start = model.test_point
             # if 'transit' in self.modelcomponents:
             #     map_estimate = xo.optimize(start=start,
-            #                                vars=[r, b, period, t0])
+            #                                vars=[ror, b, period, t0])
             # map_estimate = xo.optimize(start=map_estimate)
 
             if make_threadsafe:
@@ -383,7 +386,7 @@ class ModelFitter(ModelParser):
         Fits for:
 
             [f, log_dQ, log_Q0, log_prot, sigma_rot, rho, sigma, log_jitter,
-            ecs, b, period, t0, log_r, u[1], u[0], r_star, logg_star, mean]
+            ecs, b, period, t0, log_ror, u[1], u[0], r_star, logg_star, mean]
         """
 
         p = self.priordict
@@ -446,12 +449,15 @@ class ModelFitter(ModelParser):
                 #u_star = [u0, u1]
 
                 # fix Rp/Rs across bandpasses
-                if p['log_r'][0] == 'Uniform':
-                    log_r = pm.Uniform('log_r', lower=p['log_r'][1],
-                                       upper=p['log_r'][2], testval=p['log_r'][3])
+                if p['log_ror'][0] == 'Uniform':
+                    log_ror = pm.Uniform('log_ror', lower=p['log_ror'][1],
+                                       upper=p['log_ror'][2], testval=p['log_ror'][3])
                 else:
                     raise NotImplementedError
-                r = pm.Deterministic('r', tt.exp(log_r))
+                ror = pm.Deterministic('ror', tt.exp(log_ror))
+                r_pl = pm.Deterministic(
+                    "r_pl", ror*r_star
+                )
 
                 # orbital parameters for planet (single)
                 t0 = pm.Normal(
@@ -462,12 +468,8 @@ class ModelFitter(ModelParser):
                     testval=p['period'][1]
                 )
                 b = xo.distributions.ImpactParameter(
-                    "b", ror=r, testval=p['b'][1]
+                    "b", ror=ror, testval=p['b'][1]
                 )
-
-                # NOTE: begin copy-pasting in (selectively) from Trevor David's
-                # epic216357880 analysis. (Which ofc is based on DFM's
-                # tutorials).
 
                 # eccentricity
                 ecs = pmx.UnitDisk(
@@ -501,7 +503,7 @@ class ModelFitter(ModelParser):
                 # log_sigma_lc = pm.Normal(
                 #     "log_sigma_lc", mu=np.log(np.median(yerr[mask])), sd=10
                 # )
-                # log_rho_gp = pm.Normal("log_rho_gp", mu=0.0, sd=10)
+                # log_rorho_gp = pm.Normal("log_rho_gp", mu=0.0, sd=10)
                 # log_sigma_gp = pm.Normal(
                 #     "log_sigma_gp", mu=np.log(np.std(y[mask])), sd=10
                 # )
@@ -527,7 +529,7 @@ class ModelFitter(ModelParser):
                 light_curves = pm.Deterministic(
                     "light_curves",
                     star.get_light_curve(
-                        orbit=orbit, r=r, t=x[mask], texp=texp
+                        orbit=orbit, r=r_pl, t=x[mask], texp=texp
                     )
                 )
 
@@ -659,7 +661,7 @@ class ModelFitter(ModelParser):
 
                 # planet radius in jupiter radii
                 r_planet = pm.Deterministic(
-                    "r_planet", (r*r_star)*( 1*units.Rsun/(1*units.Rjup) ).cgs.value
+                    "r_planet", (ror*r_star)*( 1*units.Rsun/(1*units.Rjup) ).cgs.value
                 )
 
                 #
@@ -692,7 +694,7 @@ class ModelFitter(ModelParser):
                     'T_14',
                     (period/np.pi)*
                     tt.arcsin(
-                        (1/a_Rs) * pm.math.sqrt( (1+r)**2 - b**2 )
+                        (1/a_Rs) * pm.math.sqrt( (1+ror)**2 - b**2 )
                         * (1/sini)
                     )*24
                     *(
@@ -704,7 +706,7 @@ class ModelFitter(ModelParser):
                     'T_13',
                     (period/np.pi)*
                     tt.arcsin(
-                        (1/a_Rs) * pm.math.sqrt( (1-r)**2 - b**2 )
+                        (1/a_Rs) * pm.math.sqrt( (1-ror)**2 - b**2 )
                         * (1/sini)
                     )*24
                     *(
@@ -747,7 +749,7 @@ class ModelFitter(ModelParser):
                 # u_star]...]
                 map_soln = pmx.optimize(
                     start=map_soln,
-                    vars=[log_r, b, ecc, omega, t0, period, r_star, logg_star,
+                    vars=[log_ror, b, ecc, omega, t0, period, r_star, logg_star,
                           u_star]
                 )
 
@@ -855,11 +857,21 @@ class ModelFitter(ModelParser):
 
         Fits for:
 
-            [f, log_dQ, log_Q0, log_prot, sigma_rot, log_jitter,
-            ecs, b, period, t0, log_r, u[1], u[0], r_star, logg_star, mean]
+            [f, log_dQ, log_Q0, log_prot, sigma_rot, log_jitter, ecs, b,
+            period, t0, log_ror (or log_depth), u[1], u[0], r_star, logg_star,
+            mean]
+
+            NOTE: log_ror can be substituted with log_depth in the prior for the
+            "alternative" parametrization.  In this case, the impact parameter
+            prior must be uniform (from 0 to 1).
         """
 
         p = self.priordict
+
+        # At most one of these parametrizations can be used.
+        var0 = 'log_depth' in p.keys()
+        var1 = 'log_ror' in p.keys()
+        assert int(var0) + int(var1) == 1
 
         # if the model has already been run, pull the result from the
         # pickle. otherwise, run it.
@@ -902,29 +914,58 @@ class ModelFitter(ModelParser):
                     "rho_star", factor*10**logg_star / r_star
                 )
 
-                # limb-darkening. adopt uniform, rather than Kipping 2013 -- i.e., take
-                # an "informed prior" approach.
+                # limb-darkening: adopt Kipping 2013.
                 u_star = xo.QuadLimbDark("u_star")
+                star = xo.LimbDarkLightCurve(u_star)
 
-                #u0 = pm.Uniform(
-                #    'u[0]', lower=p['u[0]'][1],
-                #    upper=p['u[0]'][2],
-                #    testval=p['u[0]'][3]
-                #)
-                #u1 = pm.Uniform(
-                #    'u[1]', lower=p['u[1]'][1],
-                #    upper=p['u[1]'][2],
-                #    testval=p['u[1]'][3]
-                #)
-                #u_star = [u0, u1]
+                if 'log_ror' in p.keys():
 
-                # fix Rp/Rs across bandpasses
-                if p['log_r'][0] == 'Uniform':
-                    log_r = pm.Uniform('log_r', lower=p['log_r'][1],
-                                       upper=p['log_r'][2], testval=p['log_r'][3])
+                    # "Classical parametrization": fit log(Rp/R*), and allow the
+                    # correct impact parameter prior from 0 to 1+Rp/R*.
+                    # This fixes Rp/Rs across bandpasses.
+                    if p['log_ror'][0] == 'Uniform':
+                        log_ror = pm.Uniform('log_ror', lower=p['log_ror'][1],
+                                             upper=p['log_ror'][2],
+                                             testval=p['log_ror'][3])
+                    else:
+                        raise NotImplementedError
+                    ror = pm.Deterministic('ror', tt.exp(log_ror))
+
+                    assert p['b'][0] == 'ImpactParameter'
+                    b = xo.distributions.ImpactParameter(
+                        "b", ror=ror, testval=p['b'][1]
+                    )
+
+                elif 'log_depth' in p.keys():
+
+                    # Alternative parametrization: fit log(depth).  Requires
+                    # impact parameter prior from 0 to 1, because otherwise
+                    # there's a sqrt(1-b^2) that doesn't make sense, per
+                    # https://github.com/exoplanet-dev/exoplanet/blob/e99d1bd68654f21efbbf8400a83889a470d2baf7/src/exoplanet/light_curves/limb_dark.py#L73
+
+                    assert p['b'][0] == 'Uniform'
+                    b = pm.Uniform("b", lower=0, upper=1)
+
+                    log_depth = pm.Normal(
+                        "log_depth",
+                        mu=p['log_depth'][1],
+                        sigma=p['log_depth'][2]
+                    )
+                    depth = pm.Deterministic(
+                        'depth', tt.exp(log_depth)
+                    )
+                    ror = pm.Deterministic(
+                        "ror",
+                        star.get_ror_from_approx_transit_depth(
+                            depth, b
+                        ),
+                    )
+                    r_pl = pm.Deterministic(
+                        "r_pl", ror*r_star
+                    )
+
                 else:
                     raise NotImplementedError
-                r = pm.Deterministic('r', tt.exp(log_r))
 
                 # orbital parameters for planet (single)
                 t0 = pm.Normal(
@@ -934,13 +975,6 @@ class ModelFitter(ModelParser):
                     'period', mu=p['period'][1], sd=p['period'][2],
                     testval=p['period'][1]
                 )
-                b = xo.distributions.ImpactParameter(
-                    "b", ror=r, testval=p['b'][1]
-                )
-
-                # NOTE: begin copy-pasting in (selectively) from Trevor David's
-                # epic216357880 analysis. (Which ofc is based on DFM's
-                # tutorials).
 
                 # eccentricity
                 ecs = pmx.UnitDisk(
@@ -990,68 +1024,21 @@ class ModelFitter(ModelParser):
                     omega=omega
                 )
 
-                star = xo.LimbDarkLightCurve(u_star)
+                light_curve = mean + tt.sum(
+                    star.get_light_curve(orbit=orbit, r=r_pl, t=x[mask], texp=texp), axis=-1
+                )
+                resid = y[mask] - light_curve
 
-                # NOTE: could loop over instruments here... (e.g., TESS, keplerllc,
-                # keplersc, ground-based instruments...). Instead, opt for simpler
-                # single-instrument approach.
-
-                # Compute the model light curve
                 light_curves = pm.Deterministic(
                     "light_curves",
                     star.get_light_curve(
-                        orbit=orbit, r=r, t=x[mask], texp=texp
+                        orbit=orbit, r=r_pl, t=x[mask], texp=texp
                     )
                 )
-
-                # Line that adds the transit models of different planets in the system,
-                # if relevant
-                light_curve = pm.math.sum(light_curves, axis=-1) + mean
-                resid = y[mask] - light_curve
-
-                ## Below is the GP model from the "together" tutorial. We'll use the GP
-                ## model from the stellar variability tutorial instead.  GP model for
-                ## the light curve
-                # kernel = terms.SHOTerm(
-                #     sigma=tt.exp(log_sigma_gp),
-                #     rho=tt.exp(log_rho_gp),
-                #     Q=1 / np.sqrt(2),
-                # )
-                # gp = GaussianProcess(kernel, t=x[mask], yerr=tt.exp(log_sigma_lc))
-                # gp.marginal("transit_obs", observed=resid)
-                # pm.Deterministic("gp_pred", gp.predict(resid))
-
-                # Use the GP model from the stellar variability tutorial
-                # https://gallery.exoplanet.codes/en/latest/tutorials/stellar-variability/
-                # Literally the same prior parameters too.
 
                 # A jitter term describing excess white noise
                 log_jitter = pm.Normal("log_jitter", mu=np.log(np.mean(yerr)),
                                        sd=p['log_jitter'][2])
-
-                ##A term to describe the non-periodic variability
-                #sigma = pm.InverseGamma(
-                #    "sigma",
-                #    **pmx.estimate_inverse_gamma_parameters(
-                #        p['sigma'][1], p['sigma'][2]
-                #    )
-                #)
-
-                # NOTE: default recommended by DFM is InvGamma(0.5, 2). But in
-                # our model of [non-periodic SHO term] X [periodic SHO terms at
-                # Prot and 0.5*Prot] this can produce tension against the
-                # RotationTerm, leading to overfitting -- preferring to explain
-                # the transits away as noise rather than signal. So, take a
-                # uniform prior, U[1,10].  This roughly corresponds to the
-                # "stochastically-driven, damped harmonic oscillator" in the
-                # non-period SHO term
-
-                #rho = pm.Uniform("rho", lower=p['rho'][1], upper=p['rho'][2])
-                #rho = pm.InverseGamma(
-                #    "rho", **pmx.estimate_inverse_gamma_parameters(
-                #        p['rho'][1], p['rho'][2]
-                #    )
-                #)
 
                 # The parameters of the RotationTerm kernel
                 sigma_rot = pm.InverseGamma(
@@ -1086,11 +1073,18 @@ class ModelFitter(ModelParser):
                     dQ=tt.exp(log_dQ),
                     f=f,
                 )
+                #
+                # note mean of the GP is ~zero, since it only predicts the
+                # stellar variability (which is then added in).  but not
+                # exactly.  Total = median+transit+GP.  But if you let the GP
+                # mean below be 0, you'd be saying "Total = mean+transit+GP",
+                # which would be incorrect.  So, you subtract the mean, and add
+                # the median.
+                #
                 gp = GaussianProcess(
                     kernel,
                     t=x[mask],
                     diag=yerr[mask]**2 + tt.exp(2 * log_jitter),
-                    mean=mean,
                     quiet=True,
                 )
 
@@ -1099,33 +1093,9 @@ class ModelFitter(ModelParser):
                 gp.marginal("transit_obs", observed=resid)
 
                 # Compute the mean model prediction for plotting purposes
-                pm.Deterministic("gp_pred", gp.predict(resid))
-
-                # Commenting out the RV stuff
-                # And then include the RVs as in the RV tutorial
-                # x_rv_ref = 0.5 * (x_rv.min() + x_rv.max())
-
-                # def get_rv_model(t, name=""):
-                #     # First the RVs induced by the planets
-                #     vrad = orbit.get_radial_velocity(t)
-                #     pm.Deterministic("vrad" + name, vrad)
-
-                #     # Define the background model
-                #     A = np.vander(t - x_rv_ref, 3)
-                #     bkg = pm.Deterministic("bkg" + name, tt.dot(A, trend))
-
-                #     # Sum over planets and add the background to get the full model
-                #     return pm.Deterministic(
-                #         "rv_model" + name, tt.sum(vrad, axis=-1) + bkg
-                #     )
-
-                # # Define the model
-                # rv_model = get_rv_model(x_rv)
-                # get_rv_model(t_rv, name="_pred")
-
-                # # The likelihood for the RVs
-                # err = tt.sqrt(yerr_rv ** 2 + tt.exp(2 * log_sigma_rv))
-                # pm.Normal("obs", mu=rv_model, sd=err, observed=y_rv)
+                pm.Deterministic(
+                    "gp_pred", gp.predict(resid)
+                )
 
                 #
                 # Begin: derived parameters
@@ -1133,7 +1103,7 @@ class ModelFitter(ModelParser):
 
                 # planet radius in jupiter radii
                 r_planet = pm.Deterministic(
-                    "r_planet", (r*r_star)*( 1*units.Rsun/(1*units.Rjup) ).cgs.value
+                    "r_planet", (ror*r_star)*( 1*units.Rsun/(1*units.Rjup) ).cgs.value
                 )
 
                 #
@@ -1166,7 +1136,7 @@ class ModelFitter(ModelParser):
                     'T_14',
                     (period/np.pi)*
                     tt.arcsin(
-                        (1/a_Rs) * pm.math.sqrt( (1+r)**2 - b**2 )
+                        (1/a_Rs) * pm.math.sqrt( (1+ror)**2 - b**2 )
                         * (1/sini)
                     )*24
                     *(
@@ -1178,7 +1148,7 @@ class ModelFitter(ModelParser):
                     'T_13',
                     (period/np.pi)*
                     tt.arcsin(
-                        (1/a_Rs) * pm.math.sqrt( (1-r)**2 - b**2 )
+                        (1/a_Rs) * pm.math.sqrt( (1-ror)**2 - b**2 )
                         * (1/sini)
                     )*24
                     *(
@@ -1199,6 +1169,9 @@ class ModelFitter(ModelParser):
 
                 # NOTE: Method 1: don't do full optimization.
                 np.random.seed(42)
+
+                print(model.check_test_point())
+
                 if start is None:
                     start = model.test_point
 
@@ -1217,11 +1190,18 @@ class ModelFitter(ModelParser):
                         if s == 'transit':
                             # Transit: [log_r, b, t0, period, r_star,
                             # logg_star, ecs, u_star]...]
-                            map_soln = pmx.optimize(
-                                start=map_soln,
-                                vars=[log_r, b, ecc, omega, t0, period, r_star,
-                                      logg_star, u_star]
-                            )
+                            if 'log_ror' in p.keys():
+                                map_soln = pmx.optimize(
+                                    start=map_soln,
+                                    vars=[log_ror, b, ecc, omega, t0, period, r_star,
+                                          logg_star, u_star, mean]
+                                )
+                            elif 'log_depth' in p.keys():
+                                map_soln = pmx.optimize(
+                                    start=map_soln,
+                                    vars=[log_depth, b, ecc, omega, t0, period, r_star,
+                                          logg_star, u_star, mean]
+                                )
 
                         if s == 'gpJitterMean':
                             # All GP terms + jitter and mean.
@@ -1250,7 +1230,7 @@ class ModelFitter(ModelParser):
                             # bonus
                             map_soln = pmx.optimize(
                                 start=map_soln,
-                                vars=[log_r, b, log_Q0, log_dQ]
+                                vars=[log_ror, b, log_Q0, log_dQ]
                             )
 
                         if s == 'LimbDark':
@@ -1274,7 +1254,6 @@ class ModelFitter(ModelParser):
                 else:
                     # By default, do full optimization
                     map_soln = pmx.optimize(start=map_soln)
-
 
             return model, map_soln
 
@@ -1339,7 +1318,7 @@ class ModelFitter(ModelParser):
         Fits for:
             [ {instrument}_mean, {instrument}_a1, {instrument}_a2,
             {instrument}_log_jitter, {instrument}_u_star,
-            b, period, t0, log_r, r_star, logg_star]
+            b, period, t0, log_ror, r_star, logg_star]
 
         where {instrument} iterates over whatever different instruments are in
         `self.data` (e.g., "muscat_i", "muscat_z", etc.).
@@ -1379,9 +1358,12 @@ class ModelFitter(ModelParser):
                 )
 
                 # fix Rp/Rs across bandpasses
-                log_r = pm.Uniform('log_r', lower=p['log_r'][1],
-                                   upper=p['log_r'][2], testval=p['log_r'][3])
-                r = pm.Deterministic('r', tt.exp(log_r))
+                log_ror = pm.Uniform('log_ror', lower=p['log_ror'][1],
+                                   upper=p['log_ror'][2], testval=p['log_ror'][3])
+                ror = pm.Deterministic('ror', tt.exp(log_ror))
+                r_pl = pm.Deterministic(
+                    "r_pl", ror*r_star
+                )
 
                 # orbital parameters for planet (single)
                 t0 = pm.Normal(
@@ -1392,7 +1374,7 @@ class ModelFitter(ModelParser):
                     testval=p['period'][1]
                 )
                 b = xo.distributions.ImpactParameter(
-                    "b", ror=r, testval=p['b'][1]
+                    "b", ror=ror, testval=p['b'][1]
                 )
 
                 # orbit model.  assume zero eccentricity orbit.
@@ -1462,7 +1444,7 @@ class ModelFitter(ModelParser):
                             a1*(x-_tmid) +
                             a2*(x-_tmid)**2 +
                             star.get_light_curve(
-                                orbit=orbit, r=r, t=x, texp=texp
+                                orbit=orbit, r=r_pl, t=x, texp=texp
                             ).T.flatten()
                         )
 
@@ -1487,7 +1469,7 @@ class ModelFitter(ModelParser):
                         #             r = r_Bband
 
                         #         transit_lc = star.get_light_curve(
-                        #             orbit=orbit, r=r, t=x, texp=texp
+                        #             orbit=orbit, r=r_pl, t=x, texp=texp
                         #         ).T.flatten()
 
                         #         lc_models[name] = pm.Deterministic(
@@ -1519,7 +1501,7 @@ class ModelFitter(ModelParser):
 
                 # planet radius in jupiter radii
                 r_planet = pm.Deterministic(
-                    "r_planet", (r*r_star)*( 1*units.Rsun/(1*units.Rjup) ).cgs.value
+                    "r_planet", (ror*r_star)*( 1*units.Rsun/(1*units.Rjup) ).cgs.value
                 )
 
                 #
@@ -1550,7 +1532,7 @@ class ModelFitter(ModelParser):
                     'T_14',
                     (period/np.pi)*
                     tt.arcsin(
-                        (1/a_Rs) * pm.math.sqrt( (1+r)**2 - b**2 )
+                        (1/a_Rs) * pm.math.sqrt( (1+ror)**2 - b**2 )
                         * (1/sini)
                     )*24
                 )
@@ -1559,7 +1541,7 @@ class ModelFitter(ModelParser):
                     'T_13',
                     (period/np.pi)*
                     tt.arcsin(
-                        (1/a_Rs) * pm.math.sqrt( (1-r)**2 - b**2 )
+                        (1/a_Rs) * pm.math.sqrt( (1-ror)**2 - b**2 )
                         * (1/sini)
                     )*24
                 )
@@ -1628,7 +1610,7 @@ class ModelFitter(ModelParser):
 
         Fits for:
             [ {instrument}_mean, {instrument}_a1, {instrument}_a2,
-            {instrument}_log_jitter, {instrument}_log_r,
+            {instrument}_log_jitter, {instrument}_log_ror,
             {instrument}_u_star, b, period, t0, r_star, logg_star]
 
         where {instrument} iterates over whatever different instruments are in
@@ -1712,14 +1694,18 @@ class ModelFitter(ModelParser):
                         star = xo.LimbDarkLightCurve(u_star)
 
                         # let Rp/Rs float across bandpasses
-                        log_r = pm.Uniform(f'{name}_log_r',
-                                           lower=p[f'{name}_log_r'][1],
-                                           upper=p[f'{name}_log_r'][2],
-                                           testval=p[f'{name}_log_r'][3])
-                        r = pm.Deterministic(f'{name}_r', tt.exp(log_r))
+                        log_ror = pm.Uniform(f'{name}_log_ror',
+                                           lower=p[f'{name}_log_ror'][1],
+                                           upper=p[f'{name}_log_ror'][2],
+                                           testval=p[f'{name}_log_ror'][3])
+                        ror = pm.Deterministic(f'{name}_ror', tt.exp(log_ror))
+                        # planet radius in jupiter radii
+                        r_pl = pm.Deterministic(
+                            f"{name}_r_pl", ror*r_star
+                        )
                         # planet radius in jupiter radii
                         r_planet = pm.Deterministic(
-                            f"{name}_r_planet", (r*r_star)*( 1*units.Rsun/(1*units.Rjup) ).cgs.value
+                            f"{name}_r_planet", (ror*r_star)*( 1*units.Rsun/(1*units.Rjup) ).cgs.value
                         )
 
                         # Transit parameters.
@@ -1757,7 +1743,7 @@ class ModelFitter(ModelParser):
                             a1*(x-_tmid) +
                             a2*(x-_tmid)**2 +
                             star.get_light_curve(
-                                orbit=orbit, r=r, t=x, texp=texp
+                                orbit=orbit, r=r_pl, t=x, texp=texp
                             ).T.flatten()
                         )
 
@@ -1782,7 +1768,7 @@ class ModelFitter(ModelParser):
                         #             r = r_Bband
 
                         #         transit_lc = star.get_light_curve(
-                        #             orbit=orbit, r=r, t=x, texp=texp
+                        #             orbit=orbit, r=r_pl, t=x, texp=texp
                         #         ).T.flatten()
 
                         #         lc_models[name] = pm.Deterministic(
@@ -1840,7 +1826,7 @@ class ModelFitter(ModelParser):
                     'T_14',
                     (period/np.pi)*
                     tt.arcsin(
-                        (1/a_Rs) * pm.math.sqrt( (1+r)**2 - b**2 )
+                        (1/a_Rs) * pm.math.sqrt( (1+ror)**2 - b**2 )
                         * (1/sini)
                     )*24
                 )
@@ -1849,7 +1835,7 @@ class ModelFitter(ModelParser):
                     'T_13',
                     (period/np.pi)*
                     tt.arcsin(
-                        (1/a_Rs) * pm.math.sqrt( (1-r)**2 - b**2 )
+                        (1/a_Rs) * pm.math.sqrt( (1-ror)**2 - b**2 )
                         * (1/sini)
                     )*24
                 )
