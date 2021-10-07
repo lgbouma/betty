@@ -7,6 +7,8 @@ import os, re, pickle
 from copy import deepcopy
 import numpy as np, pandas as pd, matplotlib.pyplot as plt, pymc3 as pm
 from betty.helpers import flatten
+from astropy import units as u
+from numpy import array as nparr
 
 ##########################################
 # helper functions for string generation
@@ -152,7 +154,7 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
     n_fitted = len(fitted_params)
 
     derived_params = [
-        'r', 'rho_star', 'r_planet', 'a_Rs', 'cosi', 'T_14', 'T_13'
+        'depth', 'ror', 'rho_star', 'r_planet', 'a_Rs', 'cosi', 'T_14', 'T_13'
     ]
     n_derived = len(derived_params)
 
@@ -184,7 +186,10 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
         'period':('({:.5f}; {:.5f})', 7, 'd', r"$P$"),
         't0':('({:.5f}; {:.5f})', 7, 'd', r"$t_0^{(1)}$"),
         'log_r':('({:.3f}; {:.3f})', 5, '--', r"$\log R_{\rm p}/R_\star$"),
-        'b':(None, 4, '--', '$b$'),
+        'log_ror':('({:.3f}; {:.3f})', 5, '--', r"$\log R_{\rm p}/R_\star$"),
+        'log_depth':('({:.4f}; {:.4f})', 4, '--', r"$\log \delta$"),
+        'b':('({:.3f}; {:.3f})', 4, '--', '$b^{(2)}$'), # NOTE: sometimes want "None" as first entry
+        #'b':(None, 4, '--', '$b$'), # NOTE: sometimes want "None" as first entry
         'u_star[0]':(None, 3, '--', "$u_1$"),
         'u_star[1]':(None, 3, '--', "$u_2$"),
         'u[0]':('({:.3f}; {:.3f})', 3, '--', "$u_1$"),
@@ -192,7 +197,7 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
         'r_star':('({:.3f}; {:.3f})', 3, r'$R_\odot$', "$R_\star$"),
         'logg_star':('({:.3f}; {:.3f})', 3, 'cgs', "$\log g$"),
         'mean':('({:.3f}; {:.3f})', 4, '--', r"$\langle f \rangle$"),
-        'ecc':(None, 3, '--', r"$e^{(2)}$"),
+        'ecc':(None, 3, '--', r"$e^{(3)}$"),
         'omega':('({:.3f}; {:.3f})', 3, 'rad', r"$\omega$"),
         'log_jitter':('({:s}; {:.3f})', 3, '--', r"$\log \sigma_f$"),
         'rho':('({:.3f}; {:.3f})', 3, 'd', r"$\rho$"),
@@ -201,8 +206,10 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
         'log_prot':('({:.3f}; {:.3f})', 3, '$\log (\mathrm{d})$', r"$\log P_{\mathrm{rot}}$"),
         'log_Q0':('({:.3f}; {:.3f})', 3, '--', r"$\log Q_0$"),
         'log_dQ':('({:.3f}; {:.3f})', 3, '--', r"$\log \mathrm{d}Q$"),
-        'f':('({:.3f}; {:.3f})', 3, '--', r"$f$"),
+        'f':('({:.3f}; {:.3f})', 5, '--', r"$f$"),
+        'depth':('--', 6, '--', r"$\delta$"),
         'r':('--', 3, '--', r"$R_{\rm p}/R_\star$"),
+        'ror':('--', 3, '--', r"$R_{\rm p}/R_\star$"),
         'rho_star':('--', 3, 'g$\ $cm$^{-3}$', r"$\rho_\star$"),
         'r_planet':('--', 3, '$R_{\mathrm{Jup}}$', r"$R_{\rm p}$"),
         'a_Rs':('--', 3, '--', "$a/R_\star$"),
@@ -214,6 +221,7 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
     # make a dictionary, `pr`, with keys parameter name, and values latex
     # strings to be printed to the table, e.g., '$\\mathcal{N}(7.20281;
     # 0.01000)$'. for derived parameters, entry is "--".
+
     pr = {}
     round_precisions, units, latexs = [], [], []
     for p in fitted_params:
@@ -244,33 +252,66 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
         units.append(PARAMFMTDICT[p][2])
         latexs.append(PARAMFMTDICT[p][3])
 
-    df = df.T.round(
-        decimals=dict(
-            zip(df.index, round_precisions)
-        )
-    ).T
+    olddf = deepcopy(df)
 
-    df['priors'] = list(pr.values())
+    selcols0 = ['units', 'priors', 'median', 'mean', 'sd', 'hdi_3%',
+               'hdi_97%', 'ess_bulk', 'r_hat_minus1']
+    selcols1 = ['median', 'mean', 'sd', 'hdi_3%', 'hdi_97%']
 
+    #
+    # NOTE: using this approach was an initial big mistake. You don't actually want to do it
+    # this way, because pandas dataframes suck at dealing with mixed types. The
+    # thing to do here is iterate over selcols1, and for each one do a lambda
+    # function like for r_hat_minus1.
+    #
+    # df = df[selcols1].T.round(
+    #     decimals=dict(
+    #         zip(df.index, round_precisions)
+    #     )
+    # ).T
+
+    df = pd.DataFrame({})
     df['units'] = units
+    df['priors'] = list(pr.values())
+    df['ess_bulk'] = nparr(olddf.ess_bulk.astype(int))
+    df['r_hat_minus1'] = nparr(olddf.r_hat_minus1.apply(lambda x: f"{x:.1e}"))
 
-    selcols = ['units', 'priors', 'median', 'mean', 'sd', 'hdi_3%', 'hdi_97%',
-               'ess_bulk', 'r_hat_minus1']
+    for col in selcols1:
+        series = []
+        for param, precision in zip(olddf.index, round_precisions):
+            formatter = lambda x: "{x:.{precision}f}".format(x=x, precision=precision)
+            entry = formatter(olddf.loc[param, col])
+            series.append(entry)
+        df[col] = series
 
-    df = df[selcols]
     df.index = latexs
 
-    df['ess_bulk'] = df.ess_bulk.astype(int)
+    # fix column ordering
+    df = df[selcols0]
 
     _outpath = outpath.replace('.tex', '_clean_table.csv')
-    df.to_csv(_outpath, float_format='%.12f', na_rep='NaN')
+    df.to_csv(_outpath, float_format='%.7f', na_rep='NaN')
     print(f'made {_outpath}')
 
     #
     # df.to_latex is dumb with float formatting. clean it.
     #
+
+    # add R_earth by hardcoding the insert
+    rp_ind = df.index.get_loc(r'$R_{\rm p}$')
+    df0 = df.iloc[ : rp_ind+1 ]
+    df2 = df.iloc[ rp_ind+1 : ]
+
+    _params = 'median,mean,sd,hdi_3%,hdi_97%'.split(',')
+    df1 = deepcopy(df.iloc[rp_ind])
+    for _p in _params:
+        df1[_p] = np.round((float(df1[_p])*u.Rjup).to(u.Rearth).value,3)
+    df1['units'] = '$R_{\mathrm{Earth}}$'
+
+    df = pd.concat([df0, pd.DataFrame(df1).T, df2])
+
     df.to_csv(outpath, sep=',', line_terminator=' \\\\\n',
-              float_format='%.12f', na_rep='NaN')
+              float_format='%.7f', na_rep='NaN')
 
     with open(outpath, 'r') as f:
         lines = f.readlines()
@@ -292,13 +333,13 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
             lines[ix] = thisline
             continue
 
-        # iteratively replace trailing zeros with whitespace
-        while re.search("0{2,10}\ ", thisline) is not None:
-            r = re.search("0{2,10}\ ", thisline)
-            thisline = thisline.replace(
-                thisline[r.start():r.end()],
-                ' '
-            )
+        ## iteratively replace trailing zeros with whitespace
+        #while re.search("0{2,10}\ ", thisline) is not None:
+        #    r = re.search("0{2,10}\ ", thisline)
+        #    thisline = thisline.replace(
+        #        thisline[r.start():r.end()],
+        #        ' '
+        #    )
 
         lines[ix] = thisline
 
