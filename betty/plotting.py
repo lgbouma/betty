@@ -842,13 +842,14 @@ def plot_phased_light_curve(
     #
     ax = axd['A']
 
-    ax.errorbar(scale_x(x_fold[mask]), 1e3*(y[mask]-gp_mod), yerr=1e3*_yerr,
+    y0 = (y[mask]-gp_mod) - np.nanmedian(y[mask]-gp_mod)
+    ax.errorbar(scale_x(x_fold[mask]), 1e3*(y0), yerr=1e3*_yerr,
                 color="darkgray", label="data", fmt='.', elinewidth=0.2,
                 capsize=0, markersize=1, rasterized=True, zorder=-1)
 
     binsize_days = (binsize_minutes / (60*24))
     orb_bd = phase_bin_magseries(
-        x_fold[mask], y[mask]-gp_mod, binsize=binsize_days, minbinelems=3
+        x_fold[mask], y0, binsize=binsize_days, minbinelems=3
     )
     ax.scatter(
         scale_x(orb_bd['binnedphases']), 1e3*(orb_bd['binnedmags']), color='k',
@@ -883,9 +884,11 @@ def plot_phased_light_curve(
     #            color="darkgray", fmt='.', elinewidth=0.2, capsize=0,
     #            markersize=1, rasterized=True)
 
+    y1 = (y[mask]-gp_mod-lc_mod) - np.nanmedian(y[mask]-gp_mod-lc_mod)
+
     binsize_days = (binsize_minutes / (60*24))
     orb_bd = phase_bin_magseries(
-        x_fold[mask], y[mask]-gp_mod-lc_mod, binsize=binsize_days, minbinelems=3
+        x_fold[mask], y1, binsize=binsize_days, minbinelems=3
     )
     ax.scatter(
         scale_x(orb_bd['binnedphases']), 1e3*(orb_bd['binnedmags']), color='k',
