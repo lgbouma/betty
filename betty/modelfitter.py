@@ -1377,12 +1377,19 @@ class ModelFitter(ModelParser):
                     "b", ror=ror, testval=p['b'][1]
                 )
 
+                log_dur = pm.Normal(
+                    "log_dur", mu=np.log(2.8/24), sigma=5
+                )
+                dur = pm.Deterministic("dur", tt.exp(log_dur))
+
                 # orbit model.  assume zero eccentricity orbit.
                 orbit = xo.orbits.KeplerianOrbit(
                     period=period,
                     t0=t0,
                     b=b,
-                    rho_star=rho_star,
+                    duration=dur,
+                    ror=ror,
+                    #rho_star=rho_star,
                     r_star=r_star
                 )
 
@@ -1448,45 +1455,6 @@ class ModelFitter(ModelParser):
                             ).T.flatten()
                         )
 
-                        # NOTE: some boilerplate below to give an idea for how one
-                        # might go about varying the transit depth.
-
-                        # elif self.modelid == 'alltransit_quaddepthvar':
-                        #     if name != 'tess':
-                        #         # midpoint for this definition of the quadratic trend
-                        #         _tmid = np.nanmedian(x)
-
-                        #         raise NotImplementedError('boilerplate')
-
-                        #         # do custom depth-to-
-                        #         if (name == 'elsauce_20200401' or
-                        #             name == 'elsauce_20200426'
-                        #         ):
-                        #             r = r_Rband
-                        #         elif name == 'elsauce_20200521':
-                        #             r = r_Tband
-                        #         elif name == 'elsauce_20200614':
-                        #             r = r_Bband
-
-                        #         transit_lc = star.get_light_curve(
-                        #             orbit=orbit, r=r_pl, t=x, texp=texp
-                        #         ).T.flatten()
-
-                        #         lc_models[name] = pm.Deterministic(
-                        #             f'{name}_mu_transit',
-                        #             mean +
-                        #             a1*(x-_tmid) +
-                        #             a2*(x-_tmid)**2 +
-                        #             transit_lc
-                        #         )
-
-                        #         roughdepths[name] = pm.Deterministic(
-                        #             f'{name}_roughdepth',
-                        #             pm.math.abs_(transit_lc).max()
-                        #         )
-
-                        # NOTE: end boilerplate
-
                     likelihood = pm.Normal(
                         f'{name}_obs', mu=lc_models[name],
                         sigma=pm.math.sqrt(
@@ -1507,14 +1475,21 @@ class ModelFitter(ModelParser):
                 #
                 # eq 30 of winn+2010, ignoring planet density.
                 #
-                a_Rs = pm.Deterministic(
-                    "a_Rs",
-                    (rho_star * period**2)**(1/3)
-                    *
-                    (( (1*units.gram/(1*units.cm)**3) * (1*units.day**2)
-                      * const.G / (3*np.pi)
-                    )**(1/3)).cgs.value
+                _a_Rs, _ = xo.orbits.keplerian.get_aor_from_transit_duration(
+                    dur, period, b, ror=ror
                 )
+                a_Rs = pm.Deterministic(
+                    "a_Rs", _a_Rs
+                )
+
+                # a_Rs = pm.Deterministic(
+                #     "a_Rs",
+                #     (rho_star * period**2)**(1/3)
+                #     *
+                #     (( (1*units.gram/(1*units.cm)**3) * (1*units.day**2)
+                #       * const.G / (3*np.pi)
+                #     )**(1/3)).cgs.value
+                # )
 
                 #
                 # cosi. assumes e=0 (e.g., Winn+2010 eq 7)
