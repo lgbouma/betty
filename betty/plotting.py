@@ -64,8 +64,12 @@ def plot_fitindiv(m, summdf, outpath, overwrite=1, modelid=None):
         print('found {} and no overwrite'.format(outpath))
         return
 
-    # NOTE: may need to generalize this
-    instr = 'tess'
+    instrkeys = [k for k in m.priordict.keys() if '_mean' in k]
+    if len(instrkeys) > 1:
+        msg = 'Expected 1 instrument for this fit.'
+        raise NotImplementedError(msg)
+    instr = instrkeys[0].split('_')[0]
+
     time, flux, flux_err = (
         m.data[instr][0],
         m.data[instr][1],
@@ -95,7 +99,7 @@ def plot_fitindiv(m, summdf, outpath, overwrite=1, modelid=None):
     # plot model
     from betty.helpers import get_model_transit
     modtime = np.linspace(time.min(), time.max(), int(1e4))
-    params = ['period', 't0', 'log_r', 'b', 'u[0]', 'u[1]',
+    params = ['period', 't0', 'log_ror', 'b', 'u[0]', 'u[1]',
               f'{instr}_mean', 'r_star', 'logg_star']
     paramd = {k:summdf.loc[k, 'median'] for k in params}
     modflux = (
@@ -121,7 +125,7 @@ def plot_fitindiv(m, summdf, outpath, overwrite=1, modelid=None):
 
 def plot_phasefold(m, summdf, outpath, overwrite=0, show_samples=0,
                    modelid=None, inppt=0, showerror=1, xlim=None,
-                   binsize_minutes=10, savepdf=0
+                   ylim=None, binsize_minutes=10, savepdf=0
                   ):
     """
     Options:
@@ -288,6 +292,8 @@ def plot_phasefold(m, summdf, outpath, overwrite=0, show_samples=0,
         a.set_xlim((-5, 5)) # hours
         if isinstance(xlim, tuple):
             a.set_xlim(xlim) # hours
+        if isinstance(ylim, tuple):
+            a.set_ylim(ylim)
 
     if showerror:
         trans = transforms.blended_transform_factory(
@@ -464,7 +470,7 @@ def plot_grounddepth(m, summdf, outpath, overwrite=1, modelid=None,
 
     ##########################################
     # 2*transit depth in ppt, between each mean.
-    delta_y = 2 * 1e3 * (np.exp(summdf.loc['log_r', 'median']))**2
+    delta_y = 2 * 1e3 * (np.exp(summdf.loc['log_ror', 'median']))**2
     shift = 0
     for ind, r in tra_df.iterrows():
 
@@ -725,7 +731,7 @@ def get_ylimguess(y):
 def plot_phased_light_curve(
     data, soln, outpath, mask=None, from_trace=False,
     ylimd=None, binsize_minutes=20, map_estimate=None, fullxlim=False, BINMS=3,
-    do_hacky_reprerror=False
+    do_hacky_reprerror=False, alpha=1
 ):
     """
     Args:
@@ -845,7 +851,8 @@ def plot_phased_light_curve(
     y0 = (y[mask]-gp_mod) - np.nanmedian(y[mask]-gp_mod)
     ax.errorbar(scale_x(x_fold[mask]), 1e3*(y0), yerr=1e3*_yerr,
                 color="darkgray", label="data", fmt='.', elinewidth=0.2,
-                capsize=0, markersize=1, rasterized=True, zorder=-1)
+                capsize=0, markersize=1, rasterized=True, zorder=-1,
+                alpha=alpha)
 
     binsize_days = (binsize_minutes / (60*24))
     orb_bd = phase_bin_magseries(
@@ -854,7 +861,7 @@ def plot_phased_light_curve(
     ax.scatter(
         scale_x(orb_bd['binnedphases']), 1e3*(orb_bd['binnedmags']), color='k',
         s=BINMS,
-        alpha=1, zorder=1002#, linewidths=0.2, edgecolors='white'
+        alpha=1, zorder=1002, rasterized=True#, linewidths=0.2, edgecolors='white'
     )
 
     ax.plot(scale_x(lc_modx), 1e3*lc_mody, color="C4", label="transit model",
@@ -892,7 +899,7 @@ def plot_phased_light_curve(
     )
     ax.scatter(
         scale_x(orb_bd['binnedphases']), 1e3*(orb_bd['binnedmags']), color='k',
-        s=BINMS, alpha=1, zorder=1002#, linewidths=0.2, edgecolors='white'
+        s=BINMS, alpha=1, zorder=1002, rasterized=True#, linewidths=0.2, edgecolors='white'
     )
     ax.axhline(0, color="C4", lw=1, ls='-', zorder=1000)
 
@@ -1090,7 +1097,7 @@ def plot_phased_subsets(
         ax.scatter(
             orb_bd['binnedphases']*24, 1e3*(orb_bd['binnedmags'])+y_offset, color='k',
             s=BINMS,
-            alpha=1, zorder=1002#, linewidths=0.2, edgecolors='white'
+            alpha=1, zorder=1002, rasterized=True#, linewidths=0.2, edgecolors='white'
         )
 
         if label is not None:
@@ -1144,7 +1151,7 @@ def plot_phased_subsets(
         )
         ax.scatter(
             orb_bd['binnedphases']*24, 1e3*(orb_bd['binnedmags'])+y_offset_resid, color='k',
-            s=BINMS, alpha=1, zorder=1002#, linewidths=0.2, edgecolors='white'
+            s=BINMS, alpha=1, zorder=1002, rasterized=True#, linewidths=0.2, edgecolors='white'
         )
         ax.axhline(0+y_offset_resid, color="C4", lw=1, ls='-', zorder=1000)
 
