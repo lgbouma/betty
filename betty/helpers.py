@@ -13,6 +13,8 @@ Contents:
     _estimate_mode: get mode of unimodal pdf given samples, via gaussian KDE.
 
     get_wasp4_lightcurve: used for module testing.
+
+    _given_mag_get_flux
 """
 import os, collections
 import numpy as np, pandas as pd
@@ -153,9 +155,9 @@ def get_model_transit(paramd, time_eval, t_exp=2/(60*24)):
     period = paramd['period']
     t0 = paramd['t0']
     try:
-        r = paramd['r']
+        r = paramd['ror']
     except KeyError:
-        r = np.exp(paramd['log_r'])
+        r = np.exp(paramd['log_ror'])
 
     b = paramd['b']
     u0 = paramd['u[0]']
@@ -192,7 +194,11 @@ def get_model_transit(paramd, time_eval, t_exp=2/(60*24)):
 
 def _get_fitted_data_dict(m, summdf):
 
-    instr = 'tess'
+    instrkeys = [k for k in m.priordict.keys() if '_mean' in k]
+    if len(instrkeys) > 1:
+        msg = 'Expected 1 instrument for this fit.'
+        raise NotImplementedError(msg)
+    instr = instrkeys[0].split('_')[0]
     _m = m.data[instr]
 
     d = {
@@ -204,7 +210,7 @@ def _get_fitted_data_dict(m, summdf):
         'y_err': _m[2]
     }
 
-    params = ['period', 't0', 'log_r', 'b', 'u[0]', 'u[1]', f'{instr}_mean',
+    params = ['period', 't0', 'log_ror', 'b', 'u[0]', 'u[1]', f'{instr}_mean',
               'r_star', 'logg_star']
 
     paramd = {k:summdf.loc[k, 'median'] for k in params}
@@ -228,7 +234,7 @@ def _get_fitted_data_dict_alltransit(m, summdf):
         d[name]['y_obs'] = m.data[name][1]
         d[name]['y_err'] = m.data[name][2]
 
-        params = ['period', 't0', 'log_r', 'b', 'u[0]', 'u[1]', 'r_star',
+        params = ['period', 't0', 'log_ror', 'b', 'u[0]', 'u[1]', 'r_star',
                   'logg_star', f'{name}_mean']
 
         paramd = {k : summdf.loc[k, 'median'] for k in params}
@@ -267,7 +273,7 @@ def _get_fitted_data_dict_allindivtransit(m, summdf, bestfitmeans='median'):
         # d[name]['y_obs'] = m.data[name][1]
         d[name]['y_err'] = m.data[name][2]
 
-        params = ['period', 't0', 'log_r', 'b', 'u[0]', 'u[1]', 'r_star',
+        params = ['period', 't0', 'log_ror', 'b', 'u[0]', 'u[1]', 'r_star',
                   'logg_star', f'{name}_mean', f'{name}_a1', f'{name}_a2']
 
         _tmid = np.nanmedian(m.data[name][0])
@@ -464,5 +470,27 @@ def _estimate_mode(samples, N=1000):
     return peak
 
 
+def _given_mag_get_flux(mag, err_mag=None):
+    """
+    Given a time-series of magnitudes, convert it to relative fluxes.
+    """
 
+    mag_0, f_0 = 12, 1e4
+    flux = f_0 * 10**( -0.4 * (mag - mag_0) )
+    fluxmedian = np.nanmedian(flux)
+    flux /= fluxmedian
 
+    if err_mag is None:
+        return flux
+
+    else:
+
+        #
+        # sigma_flux = dg/d(mag) * sigma_mag, for g=f0 * 10**(-0.4*(mag-mag0)).
+        #
+        err_flux = np.abs(
+            -0.4 * np.log(10) * f_0 * 10**(-0.4*(mag-mag_0)) * err_mag
+        )
+        err_flux /= fluxmedian
+
+        return flux, err_flux
