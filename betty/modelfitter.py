@@ -108,41 +108,36 @@ class ModelFitter(ModelParser):
         # hard-code against thread safety. (PyMC3 + matplotlib).
         make_threadsafe = False
 
+        updatestr = (
+            f'Beginning inference run for {modelid} '
+            f'(N_samples={N_samples})...'
+        )
+        print(updatestr)
         if modelid == 'simpletransit':
-            print(f'Beginning run_transit_inference for {modelid}...')
             self.run_transit_inference(
                 pklpath, make_threadsafe=make_threadsafe
             )
-            print(f'Finished run_transit_inference for {modelid}...')
 
         elif modelid == 'QuadMulticolorTransit':
-            print(f'Beginning PyMC3 run for {modelid}...')
             self.run_QuadMulticolorTransit_inference(
                 pklpath, make_threadsafe=make_threadsafe
             )
-            print(f'Finished PyMC3 for {modelid}...')
 
         elif modelid == 'QuadMulticolorVaryDepthTransit':
-            print(f'Beginning PyMC3 run for {modelid}...')
             self.run_QuadMulticolorVaryDepthTransit_inference(
                 pklpath, make_threadsafe=make_threadsafe
             )
-            print(f'Finished PyMC3 for {modelid}...')
 
         elif modelid == 'RotStochGPtransit':
-            print(f'Beginning PyMC3 run for {modelid}...')
             self.run_RotStochGPtransit_inference(
                 pklpath, make_threadsafe=make_threadsafe
             )
-            print(f'Finished PyMC3 for {modelid}...')
 
         elif modelid == 'RotGPtransit':
-            print(f'Beginning PyMC3 run for {modelid}...')
             self.run_RotGPtransit_inference(
                 pklpath, make_threadsafe=make_threadsafe,
                 map_optimization_method=map_optimization_method
             )
-            print(f'Finished PyMC3 for {modelid}...')
 
         elif modelid == 'rvorbit':
             self.run_rvorbit_inference(
@@ -166,6 +161,8 @@ class ModelFitter(ModelParser):
                 pklpath, make_threadsafe=make_threadsafe
             )
 
+        print(f'Finished PyMC3 for {modelid}...')
+
 
     def run_transit_inference(self, pklpath, make_threadsafe=True):
         """
@@ -179,6 +176,7 @@ class ModelFitter(ModelParser):
         # if the model has already been run, pull the result from the
         # pickle. otherwise, run it.
         if os.path.exists(pklpath):
+            print('Found {pklpath}, loading from cache.')
             d = pickle.load(open(pklpath, 'rb'))
             self.model = d['model']
             self.trace = d['trace']
@@ -394,6 +392,7 @@ class ModelFitter(ModelParser):
         # if the model has already been run, pull the result from the
         # pickle. otherwise, run it.
         if os.path.exists(pklpath):
+            print('Found {pklpath}, loading from cache.')
             d = pickle.load(open(pklpath, 'rb'))
             self.model = d['model']
             self.trace = d['trace']
@@ -876,6 +875,7 @@ class ModelFitter(ModelParser):
         # if the model has already been run, pull the result from the
         # pickle. otherwise, run it.
         if os.path.exists(pklpath):
+            print('Found {pklpath}, loading from cache.')
             d = pickle.load(open(pklpath, 'rb'))
             self.model = d['model']
             self.trace = d['trace']
@@ -1329,6 +1329,7 @@ class ModelFitter(ModelParser):
         # if the model has already been run, pull the result from the
         # pickle. otherwise, run it.
         if os.path.exists(pklpath):
+            print('Found {pklpath}, loading from cache.')
             d = pickle.load(open(pklpath, 'rb'))
             self.model = d['model']
             self.trace = d['trace']
@@ -1597,6 +1598,7 @@ class ModelFitter(ModelParser):
         # if the model has already been run, pull the result from the
         # pickle. otherwise, run it.
         if os.path.exists(pklpath):
+            print('Found {pklpath}, loading from cache.')
             d = pickle.load(open(pklpath, 'rb'))
             self.model = d['model']
             self.trace = d['trace']
@@ -1900,6 +1902,7 @@ class ModelFitter(ModelParser):
         # if the model has already been run, pull the result from the
         # pickle. otherwise, run it.
         if os.path.exists(pklpath):
+            print('Found {pklpath}, loading from cache.')
             d = pickle.load(open(pklpath, 'rb'))
             self.model = None
             self.trace = d['trace']
