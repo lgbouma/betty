@@ -11,7 +11,7 @@ delta_u = 0.2
 priordict = {
 'period': ('Normal', 4.62787, 0.01), # SPOC widened
 't0': ('Normal', 1984.6530, 0.05), # SPOC widened
-'log_r': ('Uniform', np.log(1e-2), np.log(1), np.log(0.0803)),
+'log_ror': ('Uniform', np.log(1e-2), np.log(1), np.log(0.0803)),
 'b': ('ImpactParameter', 0.8),
 'u[0]': ('Uniform', u0-delta_u, u0+delta_u, u0),
 'u[1]': ('Uniform', u1-delta_u, u1+delta_u, u1),
