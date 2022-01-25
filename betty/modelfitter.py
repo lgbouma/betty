@@ -176,7 +176,7 @@ class ModelFitter(ModelParser):
         # if the model has already been run, pull the result from the
         # pickle. otherwise, run it.
         if os.path.exists(pklpath):
-            print('Found {pklpath}, loading from cache.')
+            print(f'Found {pklpath}, loading from cache.')
             d = pickle.load(open(pklpath, 'rb'))
             self.model = d['model']
             self.trace = d['trace']
@@ -392,7 +392,7 @@ class ModelFitter(ModelParser):
         # if the model has already been run, pull the result from the
         # pickle. otherwise, run it.
         if os.path.exists(pklpath):
-            print('Found {pklpath}, loading from cache.')
+            print(f'Found {pklpath}, loading from cache.')
             d = pickle.load(open(pklpath, 'rb'))
             self.model = d['model']
             self.trace = d['trace']
@@ -875,7 +875,7 @@ class ModelFitter(ModelParser):
         # if the model has already been run, pull the result from the
         # pickle. otherwise, run it.
         if os.path.exists(pklpath):
-            print('Found {pklpath}, loading from cache.')
+            print(f'Found {pklpath}, loading from cache.')
             d = pickle.load(open(pklpath, 'rb'))
             self.model = d['model']
             self.trace = d['trace']
@@ -1329,7 +1329,7 @@ class ModelFitter(ModelParser):
         # if the model has already been run, pull the result from the
         # pickle. otherwise, run it.
         if os.path.exists(pklpath):
-            print('Found {pklpath}, loading from cache.')
+            print(f'Found {pklpath}, loading from cache.')
             d = pickle.load(open(pklpath, 'rb'))
             self.model = d['model']
             self.trace = d['trace']
@@ -1598,7 +1598,7 @@ class ModelFitter(ModelParser):
         # if the model has already been run, pull the result from the
         # pickle. otherwise, run it.
         if os.path.exists(pklpath):
-            print('Found {pklpath}, loading from cache.')
+            print(f'Found {pklpath}, loading from cache.')
             d = pickle.load(open(pklpath, 'rb'))
             self.model = d['model']
             self.trace = d['trace']
@@ -1902,7 +1902,7 @@ class ModelFitter(ModelParser):
         # if the model has already been run, pull the result from the
         # pickle. otherwise, run it.
         if os.path.exists(pklpath):
-            print('Found {pklpath}, loading from cache.')
+            print(f'Found {pklpath}, loading from cache.')
             d = pickle.load(open(pklpath, 'rb'))
             self.model = None
             self.trace = d['trace']

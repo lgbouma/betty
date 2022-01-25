@@ -738,7 +738,7 @@ def plot_phased_light_curve(
 
         data (OrderedDict): data['tess'] = (time, flux, flux_err, t_exp)
 
-        soln (az.data.inference_data.InferenceData): can MAP solution from
+        soln (az.data.inference_data.InferenceData): can be MAP solution from
         PyMC3. can also be the posterior's trace itself (m.trace.posterior).
         If the posterior is passed, bands showing the 2-sigma uncertainty
         interval will be drawn.
