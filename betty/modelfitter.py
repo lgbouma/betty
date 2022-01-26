@@ -960,12 +960,13 @@ class ModelFitter(ModelParser):
                             depth, b
                         ),
                     )
-                    r_pl = pm.Deterministic(
-                        "r_pl", ror*r_star
-                    )
 
                 else:
                     raise NotImplementedError
+
+                r_pl = pm.Deterministic(
+                    "r_pl", ror*r_star
+                )
 
                 # orbital parameters for planet (single)
                 t0 = pm.Normal(
