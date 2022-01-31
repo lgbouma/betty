@@ -127,6 +127,14 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
         outdf.to_csv(summarypath, index=True)
         print(f'Wrote {summarypath}')
 
+    # determine whether parametrization == 'log_depth_and_b' or 'log_ror_and_b'
+    if 'log_ror' in list(outdf.index) and 'b' in list(outdf.index):
+        parametrization = 'log_ror_and_b'
+    elif 'log_depth' in list(outdf.index) and 'b' in list(outdf.index):
+        parametrization = 'log_depth_and_b'
+    else:
+        raise NotImplementedError
+
     # cleaning step: pm.summary produces a few parameters with indices that end
     # with [0] even with they should be singletons
     cleanstrs = [
@@ -153,9 +161,15 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
 
     n_fitted = len(fitted_params)
 
-    derived_params = [
-        'depth', 'ror', 'rho_star', 'r_planet', 'a_Rs', 'cosi', 'T_14', 'T_13'
-    ]
+    if parametrization == 'log_depth_and_b':
+        derived_params = [
+            'depth', 'ror', 'rho_star', 'r_planet', 'a_Rs', 'cosi', 'T_14', 'T_13'
+        ]
+    elif parametrization == 'log_ror_and_b':
+        derived_params = [
+            'ror', 'rho_star', 'r_planet', 'a_Rs', 'cosi', 'T_14', 'T_13'
+        ]
+
     n_derived = len(derived_params)
 
     srows = []
@@ -188,8 +202,7 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
         'log_r':('({:.3f}; {:.3f})', 5, '--', r"$\log R_{\rm p}/R_\star$"),
         'log_ror':('({:.3f}; {:.3f})', 5, '--', r"$\log R_{\rm p}/R_\star$"),
         'log_depth':('({:.4f}; {:.4f})', 4, '--', r"$\log \delta$"),
-        'b':('({:.3f}; {:.3f})', 4, '--', '$b^{(2)}$'), # NOTE: sometimes want "None" as first entry
-        #'b':(None, 4, '--', '$b$'), # NOTE: sometimes want "None" as first entry
+        'b':('({:.3f}; {:.3f})', 4, '--', '$b^{(2)}$') if parametrization=='log_depth_and_b' else (None, 4, '--', '$b$'),
         'u_star[0]':(None, 3, '--', "$u_1$"),
         'u_star[1]':(None, 3, '--', "$u_2$"),
         'u[0]':('({:.3f}; {:.3f})', 3, '--', "$u_1$"),
@@ -273,7 +286,7 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
     df = pd.DataFrame({})
     df['units'] = units
     df['priors'] = list(pr.values())
-    df['ess_bulk'] = nparr(olddf.ess_bulk.astype(int))
+    df['ess_bulk'] = nparr(olddf.ess_bulk.apply(lambda x: f"{x:.0f}"))
     df['r_hat_minus1'] = nparr(olddf.r_hat_minus1.apply(lambda x: f"{x:.1e}"))
 
     for col in selcols1:
