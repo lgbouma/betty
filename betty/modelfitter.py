@@ -1057,9 +1057,17 @@ class ModelFitter(ModelParser):
                 log_dQ = pm.Normal(
                     "log_dQ", mu=p['log_dQ'][1], sd=p['log_dQ'][2]
                 )
-                f = pm.Uniform(
-                    "f", lower=p['f'][1], upper=p['f'][2]
-                )
+                fvarname = 'log_f' if 'log_f' in p.keys() else 'f'
+                if fvarname == 'log_f':
+                    log_f = pm.Uniform(
+                        "log_f", lower=p['log_f'][1], upper=p['log_f'][2],
+                        testval=p['log_f'][3]
+                    )
+                    f = pm.Deterministic("f", tt.exp(log_f))
+                elif fvarname == 'f':
+                    f = pm.Uniform(
+                        "f", lower=p['f'][1], upper=p['f'][2]
+                    )
 
                 # Set up the Gaussian Process model. See
                 # https://celerite2.readthedocs.io/en/latest/tutorials/first/

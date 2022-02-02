@@ -1,6 +1,9 @@
 """
 Given the output chains from betty.modelfitter, turn them into a LaTeX
 table that you can publish.
+
+Main driver function:
+    make_posterior_table
 """
 
 import os, re, pickle
@@ -220,6 +223,7 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
         'log_Q0':('({:.3f}; {:.3f})', 3, '--', r"$\log Q_0$"),
         'log_dQ':('({:.3f}; {:.3f})', 3, '--', r"$\log \mathrm{d}Q$"),
         'f':('({:.3f}; {:.3f})', 5, '--', r"$f$"),
+        'log_f':('({:.3f}; {:.3f})', 5, '--', r"$\log f$"),
         'depth':('--', 6, '--', r"$\delta$"),
         'r':('--', 3, '--', r"$R_{\rm p}/R_\star$"),
         'ror':('--', 3, '--', r"$R_{\rm p}/R_\star$"),
