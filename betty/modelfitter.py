@@ -236,19 +236,25 @@ class ModelFitter(ModelParser):
             )
 
             # limb-darkening
-            u0 = pm.Uniform(
-                'u[0]', lower=p['u[0]'][1],
-                upper=p['u[0]'][2],
-                testval=p['u[0]'][3]
-            )
-            u1 = pm.Uniform(
-                'u[1]', lower=p['u[1]'][1],
-                upper=p['u[1]'][2],
-                testval=p['u[1]'][3]
-            )
-            u = [u0, u1]
+            if 'u[0]' in p.keys() and 'u[1]' in p.keys():
+                u0 = pm.Uniform(
+                    'u[0]', lower=p['u[0]'][1],
+                    upper=p['u[0]'][2],
+                    testval=p['u[0]'][3]
+                )
+                u1 = pm.Uniform(
+                    'u[1]', lower=p['u[1]'][1],
+                    upper=p['u[1]'][2],
+                    testval=p['u[1]'][3]
+                )
+                u_star = [u0, u1]
 
-            star = xo.LimbDarkLightCurve(u)
+            else:
+                assert 'u_star' in p.keys()
+                assert p['u_star'][0] == 'QuadLimbDark'
+                u_star = xo.QuadLimbDark("u_star")
+
+            star = xo.LimbDarkLightCurve(u_star)
 
             # Loop over "instruments" (TESS, then each ground-based lightcurve)
             parameters = dict()
