@@ -13,5 +13,6 @@ priordict = {
 'u[1]': ('Uniform', 0.210-0.2, 0.210+0.2, 0.210),
 'r_star': ('Normal', 0.893, 0.034),
 'logg_star': ('Normal', 4.47, 0.11),
-'tess_mean': ('Normal', 1, 0.1)
+'tess_mean': ('Normal', 1, 0.1),
+'log_jitter': ('Normal', r"\log\langle \sigma_f \rangle", 2.0),
 }

@@ -19,5 +19,6 @@ priordict = {
 # 'logg_star': ('Normal', 4.21633, 0.09015), # TIC8
 'r_star': ('Normal', 1.468, 0.054), # Torres+10
 'logg_star': ('Normal', 4.25, 0.03), # Torres+10
-'tess_mean': ('Normal', 1, 0.1)
+'tess_mean': ('Normal', 1, 0.1),
+'log_jitter': ('Normal', r"\log\langle \sigma_f \rangle", 2.0),
 }

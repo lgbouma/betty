@@ -167,8 +167,8 @@ class ModelFitter(ModelParser):
     def run_transit_inference(self, pklpath, make_threadsafe=True):
         """
         Fit transit data for an Agol+19 transit. (Ignores any stellar
-        variability; believes error bars).  Free parameters are {"period",
-        "t0", "log_ror", "b", "u0", "u1"}.
+        variability).  Free parameters are {"period", "t0", "log_ror", "b",
+        "u0", "u1", "log_jitter"}.
         """
 
         p = self.priordict
@@ -182,6 +182,11 @@ class ModelFitter(ModelParser):
             self.trace = d['trace']
             self.map_estimate = d['map_estimate']
             return 1
+
+        # assuming single instrument, get the data, and the instrument name
+        assert len(self.data.keys()) == 1
+        name = list(self.data.keys())[0]
+        x,y,yerr,texp = self.data[name]
 
         with pm.Model() as model:
 
@@ -198,6 +203,10 @@ class ModelFitter(ModelParser):
             rho_star = pm.Deterministic(
                 "rho_star", factor*10**logg_star / r_star
             )
+
+            # A jitter term describing excess white noise
+            log_jitter = pm.Normal("log_jitter", mu=np.log(np.mean(yerr)),
+                                   sd=p['log_jitter'][2])
 
             # fix Rp/Rs across bandpasses
             if p['log_ror'][0] == 'Uniform':
@@ -279,11 +288,14 @@ class ModelFitter(ModelParser):
                 else:
                     raise NotImplementedError
 
-                # TODO: add error bar fudge in other models
                 likelihood = pm.Normal(
-                    f'{name}_obs', mu=lc_models[name], sigma=yerr, observed=y
+                    f'{name}_obs',
+                    mu=lc_models[name],
+                    sigma=pm.math.sqrt(
+                        yerr**2 + tt.exp(2 * log_jitter)
+                    ),
+                    observed=y
                 )
-
 
             #
             # Derived parameters

@@ -21,5 +21,6 @@ priordict = {
 'u[1]': ('Uniform', u1-delta_u, u1+delta_u, u1),
 'r_star': ('Normal', 3.220, 0.062), # Table1 Grunblatt+22
 'logg_star': ('Normal', 3.50, 0.06), # Table1 Grunblatt+22
-'hatnet_mean': ('Normal', 1, 0.1)
+'hatnet_mean': ('Normal', 1, 0.1),
+'log_jitter': ('Normal', r"\log\langle \sigma_f \rangle", 2.0),
 }
