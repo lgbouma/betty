@@ -10,7 +10,11 @@ def test_imports():
         try:
             exec(f"import {m}")
             dep_worked = True
-        except:
+        except Exception as e:
+            print(e)
             dep_worked = False
 
         assert dep_worked
+
+if __name__ == "__main__":
+    test_imports()
