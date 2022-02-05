@@ -99,8 +99,10 @@ def plot_fitindiv(m, summdf, outpath, overwrite=1, modelid=None):
     # plot model
     from betty.helpers import get_model_transit
     modtime = np.linspace(time.min(), time.max(), int(1e4))
-    params = ['period', 't0', 'log_ror', 'b', 'u[0]', 'u[1]',
+    ukey = 'u' if 'u[0]' in summdf else 'u_star'
+    params = ['period', 't0', 'log_ror', 'b', f'{ukey}[0]', f'{ukey}[1]',
               f'{instr}_mean', 'r_star', 'logg_star']
+
     paramd = {k:summdf.loc[k, 'median'] for k in params}
     modflux = (
         get_model_transit(paramd, modtime + t_offset)

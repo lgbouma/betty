@@ -11,7 +11,7 @@ priordict = {
 'b': ('ImpactParameter', 0.5),
 #'u[0]': ('Uniform', 0.382-0.2, 0.382+0.2, 0.382),
 #'u[1]': ('Uniform', 0.210-0.2, 0.210+0.2, 0.210),
-'u_star': ('QuadLimbDark',)
+'u_star': ('QuadLimbDark',),
 'r_star': ('Normal', 0.893, 0.034),
 'logg_star': ('Normal', 4.47, 0.11),
 'tess_mean': ('Normal', 1, 0.1),

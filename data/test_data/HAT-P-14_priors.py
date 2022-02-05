@@ -15,7 +15,7 @@ priordict = {
 'b': ('ImpactParameter', 0.8),
 # 'u[0]': ('Uniform', u0-delta_u, u0+delta_u, u0),
 # 'u[1]': ('Uniform', u1-delta_u, u1+delta_u, u1),
-'u_star': ('QuadLimbDark',)
+'u_star': ('QuadLimbDark',),
 # 'r_star': ('Normal', 1.54522, 0.069), # TIC8
 # 'logg_star': ('Normal', 4.21633, 0.09015), # TIC8
 'r_star': ('Normal', 1.468, 0.054), # Torres+10

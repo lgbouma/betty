@@ -19,7 +19,7 @@ priordict = {
 'b': ('ImpactParameter', 0.52),
 # 'u[0]': ('Uniform', u0-delta_u, u0+delta_u, u0),
 # 'u[1]': ('Uniform', u1-delta_u, u1+delta_u, u1),
-'u_star': ('QuadLimbDark',)
+'u_star': ('QuadLimbDark',),
 'r_star': ('Normal', 3.220, 0.062), # Table1 Grunblatt+22
 'logg_star': ('Normal', 3.50, 0.06), # Table1 Grunblatt+22
 'hatnet_mean': ('Normal', 1, 0.1),
