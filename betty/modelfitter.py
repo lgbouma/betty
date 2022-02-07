@@ -175,13 +175,17 @@ class ModelFitter(ModelParser):
 
         # if the model has already been run, pull the result from the
         # pickle. otherwise, run it.
-        if os.path.exists(pklpath):
+        if os.path.exists(pklpath) and not self.OVERWRITE:
             print(f'Found {pklpath}, loading from cache.')
             d = pickle.load(open(pklpath, 'rb'))
             self.model = d['model']
             self.trace = d['trace']
             self.map_estimate = d['map_estimate']
             return 1
+        elif os.path.exists(pklpath) and self.OVERWRITE:
+            print(f'Found {pklpath}, and OVERWRITE is True. '
+                  'Deleting and proceeding.')
+            os.remove(pklpath)
 
         # assuming single instrument, get the data, and the instrument name
         assert len(self.data.keys()) == 1
