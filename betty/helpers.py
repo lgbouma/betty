@@ -13,6 +13,7 @@ Contents:
     _estimate_mode: get mode of unimodal pdf given samples, via gaussian KDE.
 
     get_wasp4_lightcurve: used for module testing.
+    get_tic117689799_lightcurve: ditto
 
     _given_mag_get_flux
 """
@@ -321,12 +322,6 @@ def _get_fitted_data_dict_allindivtransit(m, summdf, bestfitmeans='median'):
     return d
 
 
-
-
-
-
-
-
 def _subset_cut(x_obs, y_obs, y_err, n=12, t0=None, per=None, tdur=None,
                 onlyodd=False, onlyeven=False):
     """
@@ -425,6 +420,65 @@ def get_wasp4_lightcurve():
     flux = _f/np.nanmedian(_f)
     flux_err = _f_err/np.nanmedian(_f)
     qual = d['QUALITY']
+
+    sel = np.isfinite(time) & np.isfinite(flux) & np.isfinite(flux_err)
+
+    tess_texp = np.nanmedian(np.diff(time[sel]))
+
+    return (
+        time[sel].astype(np.float64),
+        flux[sel].astype(np.float64),
+        flux_err[sel].astype(np.float64),
+        tess_texp
+    )
+
+
+def p2p_rms(flux):
+    """
+    e.g., section 2.6 of Nardiello+2020:
+        The point-to-point RMS is not sensitive to intrinsic stellar
+        variability.  It's obtained by calculating the 84th-50th percentile of
+        the distribution of the sorted residuals from the median value of
+        δF_j = F_{j} - F_{j+1}, where j is an epoch index.
+    """
+
+    dflux = np.diff(flux)
+
+    med_dflux = np.nanmedian(dflux)
+
+    up_p2p = (
+        np.nanpercentile( np.sort(dflux-med_dflux), 84 )
+        -
+        np.nanpercentile( np.sort(dflux-med_dflux), 50 )
+    )
+    lo_p2p = (
+        np.nanpercentile( np.sort(dflux-med_dflux), 50 )
+        -
+        np.nanpercentile( np.sort(dflux-med_dflux), 16 )
+    )
+
+    p2p = np.mean([up_p2p, lo_p2p])
+
+    return p2p
+
+
+def get_tic117689799_lightcurve():
+
+    lcfile = os.path.join(
+        TESTDATADIR,
+        'gaiatwo0001833519030401513984-0014-cam1-ccd4_tess_v01_llc_simpletransit_rawlc.csv'
+    )
+
+    assert os.path.exists(lcfile), f'expected to find {lcfile}'
+
+    df = pd.read_csv(lcfile)
+
+    time = np.array(df.time)
+    _f = np.array(df.flux_PCA1)
+    flux = _f/np.nanmedian(_f)
+
+    # estimate flux error as p2p rms scatter
+    flux_err = p2p_rms(flux)*np.ones_like(flux)
 
     sel = np.isfinite(time) & np.isfinite(flux) & np.isfinite(flux_err)
 
