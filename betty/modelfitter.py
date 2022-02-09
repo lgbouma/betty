@@ -15,9 +15,35 @@ Not yet implemented here (but see /timmy/):
     run_rvorbit_inference
     run_allindivtransit_inference
 """
+#############
+## LOGGING ##
+#############
 import logging
+from astrobase import log_sub, log_fmt, log_date_fmt
+
+DEBUG = False
+if DEBUG:
+    level = logging.DEBUG
+else:
+    level = logging.INFO
+LOGGER = logging.getLogger(__name__)
+logging.basicConfig(
+    level=level,
+    style=log_sub,
+    format=log_fmt,
+    datefmt=log_date_fmt,
+)
+
+LOGDEBUG = LOGGER.debug
+LOGINFO = LOGGER.info
+LOGWARNING = LOGGER.warning
+LOGERROR = LOGGER.error
+LOGEXCEPTION = LOGGER.exception
 logging.getLogger("filelock").setLevel(logging.ERROR)
 
+#############
+## IMPORTS ##
+#############
 import numpy as np, matplotlib.pyplot as plt, pandas as pd
 import pymc3 as pm
 import pymc3_ext as pmx
@@ -78,7 +104,7 @@ class ModelFitter(ModelParser):
         self.OVERWRITE = overwrite
 
         implemented_models = [
-            'simpletransit', 'allindivtransit', 'oddindivtransit',
+            'simpletransit', 'localpolytransit', 'allindivtransit', 'oddindivtransit',
             'evenindivtransit', 'rvorbit', 'rvspotorbit', 'alltransit',
             'RotStochGPtransit', 'RotGPtransit',
             'QuadMulticolorTransit',
@@ -112,7 +138,7 @@ class ModelFitter(ModelParser):
             f'Beginning inference run for {modelid} '
             f'(N_samples={N_samples})...'
         )
-        print(updatestr)
+        LOGINFO(updatestr)
         if modelid == 'simpletransit':
             self.run_transit_inference(
                 pklpath, make_threadsafe=make_threadsafe
@@ -161,7 +187,7 @@ class ModelFitter(ModelParser):
                 pklpath, make_threadsafe=make_threadsafe
             )
 
-        print(f'Finished PyMC3 for {modelid}...')
+        LOGINFO(f'Finished PyMC3 for {modelid}...')
 
 
     def run_transit_inference(self, pklpath, make_threadsafe=True):
@@ -176,14 +202,14 @@ class ModelFitter(ModelParser):
         # if the model has already been run, pull the result from the
         # pickle. otherwise, run it.
         if os.path.exists(pklpath) and not self.OVERWRITE:
-            print(f'Found {pklpath}, loading from cache.')
+            LOGINFO(f'Found {pklpath}, loading from cache.')
             d = pickle.load(open(pklpath, 'rb'))
             self.model = d['model']
             self.trace = d['trace']
             self.map_estimate = d['map_estimate']
             return 1
         elif os.path.exists(pklpath) and self.OVERWRITE:
-            print(f'Found {pklpath}, and OVERWRITE is True. '
+            LOGINFO(f'Found {pklpath}, and OVERWRITE is True. '
                   'Deleting and proceeding.')
             os.remove(pklpath)
 
@@ -372,10 +398,10 @@ class ModelFitter(ModelParser):
             else:
                 # NOTE: would usually plot MAP estimate here, but really
                 # there's not a huge need.
-                print(map_estimate)
+                LOGINFO(map_estimate)
                 pass
 
-            print('Got MAP estimate. Beginning sampling...')
+            LOGINFO('Got MAP estimate. Beginning sampling...')
             # sample from the posterior defined by this model.
             trace = pmx.sample(
                 tune=self.N_samples, draws=self.N_samples,
@@ -414,7 +440,7 @@ class ModelFitter(ModelParser):
         # if the model has already been run, pull the result from the
         # pickle. otherwise, run it.
         if os.path.exists(pklpath):
-            print(f'Found {pklpath}, loading from cache.')
+            LOGINFO(f'Found {pklpath}, loading from cache.')
             d = pickle.load(open(pklpath, 'rb'))
             self.model = d['model']
             self.trace = d['trace']
@@ -816,7 +842,7 @@ class ModelFitter(ModelParser):
         else:
             # NOTE: would usually plot MAP estimate here, but really
             # there's not a huge need.
-            print(map_estimate)
+            LOGINFO(map_estimate)
             pass
 
         from betty import plotting as bp
@@ -833,7 +859,7 @@ class ModelFitter(ModelParser):
         )
         bp.plot_phased_light_curve(self.data, map_estimate, outpath)
 
-        print('Got MAP estimate. Beginning sampling...')
+        LOGINFO('Got MAP estimate. Beginning sampling...')
         # sample from the posterior defined by this model.
 
         #
@@ -897,7 +923,7 @@ class ModelFitter(ModelParser):
         # if the model has already been run, pull the result from the
         # pickle. otherwise, run it.
         if os.path.exists(pklpath):
-            print(f'Found {pklpath}, loading from cache.')
+            LOGINFO(f'Found {pklpath}, loading from cache.')
             d = pickle.load(open(pklpath, 'rb'))
             self.model = d['model']
             self.trace = d['trace']
@@ -1201,7 +1227,7 @@ class ModelFitter(ModelParser):
                 # NOTE: Method 1: don't do full optimization.
                 np.random.seed(42)
 
-                print(model.check_test_point())
+                LOGINFO(model.check_test_point())
 
                 if start is None:
                     start = model.test_point
@@ -1295,7 +1321,7 @@ class ModelFitter(ModelParser):
         else:
             # NOTE: would usually plot MAP estimate here, but really
             # there's not a huge need.
-            print(map_estimate)
+            LOGINFO(map_estimate)
             pass
 
         from betty import plotting as bp
@@ -1360,7 +1386,7 @@ class ModelFitter(ModelParser):
         # if the model has already been run, pull the result from the
         # pickle. otherwise, run it.
         if os.path.exists(pklpath):
-            print(f'Found {pklpath}, loading from cache.')
+            LOGINFO(f'Found {pklpath}, loading from cache.')
             d = pickle.load(open(pklpath, 'rb'))
             self.model = d['model']
             self.trace = d['trace']
@@ -1578,7 +1604,7 @@ class ModelFitter(ModelParser):
         if make_threadsafe:
             pass
         else:
-            print(map_estimate)
+            LOGINFO(map_estimate)
             pass
 
         from betty import plotting as bp
@@ -1629,7 +1655,7 @@ class ModelFitter(ModelParser):
         # if the model has already been run, pull the result from the
         # pickle. otherwise, run it.
         if os.path.exists(pklpath):
-            print(f'Found {pklpath}, loading from cache.')
+            LOGINFO(f'Found {pklpath}, loading from cache.')
             d = pickle.load(open(pklpath, 'rb'))
             self.model = d['model']
             self.trace = d['trace']
@@ -1873,7 +1899,7 @@ class ModelFitter(ModelParser):
         if make_threadsafe:
             pass
         else:
-            print(map_estimate)
+            LOGINFO(map_estimate)
             pass
 
         from betty import plotting as bp
@@ -1933,7 +1959,7 @@ class ModelFitter(ModelParser):
         # if the model has already been run, pull the result from the
         # pickle. otherwise, run it.
         if os.path.exists(pklpath):
-            print(f'Found {pklpath}, loading from cache.')
+            LOGINFO(f'Found {pklpath}, loading from cache.')
             d = pickle.load(open(pklpath, 'rb'))
             self.model = None
             self.trace = d['trace']
@@ -2046,7 +2072,7 @@ class ModelFitter(ModelParser):
             else:
                 # NOTE: would usually plot MAP estimate here, but really
                 # there's not a huge need.
-                print(map_estimate)
+                LOGINFO(map_estimate)
                 pass
 
             # sample from the posterior defined by this model.
