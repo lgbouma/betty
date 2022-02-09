@@ -66,7 +66,7 @@ def test_simpletransit(starid='WASP_4', N_samples=1000):
 
     datasets['tess'] = [time, flux, flux_err, tess_texp]
 
-    priorpath = join(TESTDATADIR, f'{starid}_priors.py')
+    priorpath = join(TESTDATADIR, f'{starid}_{modelid}_priors.py')
     if not os.path.exists(priorpath):
         # TODO: auto-get star info. follow
         # tessttvfinder.src.measure_transit_times_from_lightcurve by
