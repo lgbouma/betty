@@ -47,7 +47,7 @@ jobs:
         python -m pip install -U corner
         python -m pip install -U "exoplanet[extras]"
         python -m pip install -U astrobase
-        python -m pip install -U lightkurve
+        #python -m pip install -U lightkurve
         python -m pip install -U xarray==0.16.0
         python -m pip install -U aesthetic==0.4
 
