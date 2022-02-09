@@ -730,7 +730,6 @@ def plot_multicolorlight_curve(data, soln, outpath, mask=None):
 
         shift += delta
 
-    #ax.legend(fontsize=10)
     ax.set_ylabel(f'Relative flux')
     ax.set_xlabel(f'BJDTDB')
 
@@ -911,22 +910,10 @@ def plot_phased_light_curve_gptransit(
         )
         art.set_edgecolor("none")
 
-    # # show representative binned error
-    # _e = 1e3*np.nanmean(_yerr)
-    # # bigger bin size by 2x cadence improves uncertainty by sqrt(2).
-    # texp_factor = texp/binsize_days
-    # N_periods_observed = (np.max(x)-np.min(x))/_per
-    # duty_cycle_fudge = 0.8 # rough estimate for TESS/Kepler
-    # errorfactor = 1/( (texp_factor*duty_cycle_fudge*N_periods_observed)**(1/2) )
-    # binned_err = errorfactor*_e
-
     ax.set_xticklabels([])
 
     # residual axis
     ax = axd['B']
-    #ax.errorbar(24*x_fold[mask], 1e3*(y[mask] - gp_mod - lc_mod), yerr=1e3*_yerr,
-    #            color="darkgray", fmt='.', elinewidth=0.2, capsize=0,
-    #            markersize=1, rasterized=True)
 
     y1 = (y[mask]-gp_mod-lc_mod) - np.nanmedian(y[mask]-gp_mod-lc_mod)
 
@@ -979,7 +966,6 @@ def plot_phased_light_curve_gptransit(
         sel = np.abs(orb_bd['binnedphases']*24)>3 # at least 3 hours from mid-transit
         binned_err = 1e3*np.nanstd((orb_bd['binnedmags'][sel]))
         LOGINFO(f'WRN! Overriding binned unc as the residuals. Binned_err = {binned_err:.4f} ppt')
-        #LOGINFO(f'{_e:.2f}, {errorfactor*_e:.2f}')
 
     _x,_y = 0.8*max(axd['A'].get_xlim()), 0.7*min(axd['A'].get_ylim())
     axd['A'].errorbar(
@@ -1121,12 +1107,6 @@ def plot_phased_subsets(
         #
         ax = axs[0]
 
-        #ax.errorbar(24*x_fold[mask][sel],
-        #            1e3*(y[mask][sel]-gp_mod[sel])+y_offset,
-        #            yerr=1e3*_yerr[sel],
-        #            color="darkgray", label="data", fmt='.', elinewidth=0.2,
-        #            capsize=0, markersize=1, rasterized=True)
-
         binsize_days = (binsize_minutes / (60*24))
         orb_bd = phase_bin_magseries(
             x_fold[mask][sel], y[mask][sel]-gp_mod[sel], binsize=binsize_days, minbinelems=3
@@ -1158,28 +1138,10 @@ def plot_phased_subsets(
             )
             art.set_edgecolor("none")
 
-        # # show representative binned error
-        # _e = 1e3*np.nanmean(_yerr[sel])
-
-        # # bigger bin size by 2x cadence improves uncertainty by sqrt(2).
-        # texp_factor = texp/binsize_days
-        # N_periods_observed = (np.max(x)-np.min(x))/_per
-        # duty_cycle_fudge = 0.8 # rough estimate for TESS/Kepler
-        # errorfactor = 1/( (texp_factor*duty_cycle_fudge*N_periods_observed)**(1/2) )
-
-        # binned_err = errorfactor*_e
-
         ax.set_ylabel("Relative flux [ppt]")
-        #ax.set_xticklabels([])
 
         # residual axis
         ax = axs[1]
-        # ax.errorbar(24*x_fold[mask][sel],
-        #             1e3*(y[mask][sel] - gp_mod[sel] -
-        #                  lc_mod[sel])+y_offset_resid,
-        #             yerr=1e3*_yerr[sel],
-        #             color="darkgray", fmt='.', elinewidth=0.2, capsize=0,
-        #             markersize=1, rasterized=True)
 
         binsize_days = (binsize_minutes / (60*24))
         orb_bd = phase_bin_magseries(
@@ -1211,8 +1173,6 @@ def plot_phased_subsets(
             )
             art.set_edgecolor("none")
 
-    #ax.set_ylabel("Residual")
-
     if isinstance(ylimd, dict):
         for k,v in ylimd.items():
             axs[int(k)].set_ylim(v)
@@ -1221,35 +1181,8 @@ def plot_phased_subsets(
              fontsize='medium')
 
     for a in axs:
-        #a.set_xlabel("Hours from mid-transit")
         if not fullxlim:
             a.set_xlim(-0.2*24,0.2*24)
-        # else:
-        #     # sensible default guesses
-        #     _y = 1e3*(y[mask]-gp_mod)
-        #     axd['A'].set_ylim(get_ylimguess(_y))
-        #     _y = 1e3*(y[mask] - gp_mod - lc_mod)
-        #     axd['B'].set_ylim(get_ylimguess(_y))
-
-        #a.set_xticklabels(fontsize='medium')
-        #a.set_yticklabels(fontsize='medium')
-
-        #format_ax(a)
-
-    # # NOTE: hacky approach: override it as the stddev of the residuals. This is
-    # # dangerous, b/c if the errors are totally wrong, you might not know.
-    # if do_hacky_reprerror:
-    #     LOGINFO('WRN! Overriding binned unc as the residuals')
-    #     binned_err = np.nanstd(1e3*(orb_bd['binnedmags']))
-
-    # axd['A'].errorbar(
-    #     0.9, 0.1, yerr=binned_err,
-    #     fmt='none', ecolor='black', alpha=1, elinewidth=1, capsize=2,
-    #     transform=axd['A'].transAxes
-    # )
-
-    #LOGINFO(f'{_e:.2f}, {errorfactor*_e:.2f}')
-
 
     fig.tight_layout(h_pad=0)
 
@@ -1384,9 +1317,6 @@ def plot_phased_light_curve_samples(
 
         # residual axis
         ax = axd['B']
-        #ax.errorbar(24*x_fold[mask], 1e3*(y[mask] - gp_mod - lc_mod), yerr=1e3*_yerr,
-        #            color="darkgray", fmt='.', elinewidth=0.2, capsize=0,
-        #            markersize=1, rasterized=True)
 
         y1 = (y[mask]-gp_mod[:,nn]-lc_mod[:,nn]) - np.nanmedian(y[mask]-gp_mod[:,nn]-lc_mod[:,nn])
 
@@ -1432,7 +1362,6 @@ def plot_phased_light_curve_samples(
         sel = np.abs(orb_bd['binnedphases']*24)>3 # at least 3 hours from mid-transit
         binned_err = 1e3*np.nanstd((orb_bd['binnedmags'][sel]))
         LOGINFO(f'WRN! Overriding binned unc as the residuals. Binned_err = {binned_err:.4f} ppt')
-        #LOGINFO(f'{_e:.2f}, {errorfactor*_e:.2f}')
 
     _x,_y = 0.8*max(axd['A'].get_xlim()), 0.7*min(axd['A'].get_ylim())
     axd['A'].errorbar(
