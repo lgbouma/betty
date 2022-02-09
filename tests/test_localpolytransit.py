@@ -108,14 +108,6 @@ def test_localpolytransit(starid='TIC_117689799', N_samples=1000):
 
     PLOTDIR = TESTRESULTSDIR
 
-    if posttable:
-        outpath = join(PLOTDIR, f'{starid}_{modelid}_trimmed_posteriortable.tex')
-        make_posterior_table(pklpath, _init_priordict, outpath, modelid, makepdf=1)
-
-    if posttable:
-        outpath = join(PLOTDIR, f'{starid}_{modelid}_posteriortable.tex')
-        make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1)
-
     if phaseplot:
         outpath = join(PLOTDIR, f'{starid}_{modelid}_phaseplot.png')
         bp.plot_phasefold(m, summdf, outpath, modelid=modelid, inppt=1)
@@ -124,9 +116,18 @@ def test_localpolytransit(starid='TIC_117689799', N_samples=1000):
         outpath = join(PLOTDIR, f'{starid}_{modelid}_fitindiv.png')
         bp.plot_fitindiv(m, summdf, outpath, modelid=modelid)
 
+    if posttable:
+        outpath = join(PLOTDIR, f'{starid}_{modelid}_trimmed_posteriortable.tex')
+        make_posterior_table(pklpath, _init_priordict, outpath, modelid, makepdf=1)
+
+    if posttable:
+        outpath = join(PLOTDIR, f'{starid}_{modelid}_posteriortable.tex')
+        make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1)
+
     if cornerplot:
         outpath = join(PLOTDIR, f'{starid}_{modelid}_trimmed_cornerplot.png')
         bp.plot_cornerplot(list(_init_priordict), m, outpath)
+
 
 
 

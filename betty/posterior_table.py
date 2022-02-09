@@ -236,6 +236,16 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
         'tess_mean':('({:.3f}; {:.3f})', 4, '--', r"$\langle f \rangle$"),
         'kepler_mean':('({:.3f}; {:.3f})', 4, '--', r"$\langle f \rangle$"),
     }
+    # localpolytransit, or comparable fitters, use window-specific parameters.
+    n_tra_max = 500
+    for i in range(n_tra_max):
+        # fmtstring, precision, unit, latexrepr
+        PARAMFMTDICT[f'tess_{i}_mean'] = ('({:.3f}; {:.3f})', 4, '--', r"$a_{"+str(i)+",0;TESS"+"}$")
+        PARAMFMTDICT[f'kepler_{i}_mean'] = ('({:.3f}; {:.3f})', 4, '--', r"$a_{"+str(i)+",0;Kepler"+"}$")
+        PARAMFMTDICT[f'tess_{i}_a1'] = ('({:.3f}; {:.3f})', 4, '--', r"$a_{"+str(i)+",1;TESS"+"}$")
+        PARAMFMTDICT[f'kepler_{i}_a1'] = ('({:.3f}; {:.3f})', 4, '--', r"$a_{"+str(i)+",1;Kepler"+"}$")
+        PARAMFMTDICT[f'tess_{i}_a2'] = ('({:.3f}; {:.3f})', 4, '--', r"$a_{"+str(i)+",2;TESS"+"}$")
+        PARAMFMTDICT[f'kepler_{i}_a2'] = ('({:.3f}; {:.3f})', 4, '--', r"$a_{"+str(i)+",2;Kepler"+"}$")
 
     # make a dictionary, `pr`, with keys parameter name, and values latex
     # strings to be printed to the table, e.g., '$\\mathcal{N}(7.20281;
