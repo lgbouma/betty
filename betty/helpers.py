@@ -144,8 +144,6 @@ def retrieve_tess_lcdata(lcfiles, provenance=None, merge_sectors=1,
     return outd
 
 
-
-
 def get_model_transit(paramd, time_eval, t_exp=2/(60*24)):
     """
     you know the paramters, and just want to evaluate the median lightcurve.
@@ -160,8 +158,9 @@ def get_model_transit(paramd, time_eval, t_exp=2/(60*24)):
         r = np.exp(paramd['log_ror'])
 
     b = paramd['b']
-    u0 = paramd['u[0]']
-    u1 = paramd['u[1]']
+    ukey = 'u' if 'u[0]' in paramd.keys() else 'u_star'
+    u0 = paramd[f'{ukey}[0]']
+    u1 = paramd[f'{ukey}[1]']
 
     r_star = paramd['r_star']
     logg_star = paramd['logg_star']
@@ -210,8 +209,9 @@ def _get_fitted_data_dict(m, summdf):
         'y_err': _m[2]
     }
 
-    params = ['period', 't0', 'log_ror', 'b', 'u[0]', 'u[1]', f'{instr}_mean',
-              'r_star', 'logg_star']
+    ukey = 'u' if 'u[0]' in summdf else 'u_star'
+    params = ['period', 't0', 'log_ror', 'b', f'{ukey}[0]', f'{ukey}[1]',
+              f'{instr}_mean', 'r_star', 'logg_star']
 
     paramd = {k:summdf.loc[k, 'median'] for k in params}
     y_mod_median = get_model_transit(

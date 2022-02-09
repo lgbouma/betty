@@ -167,21 +167,30 @@ class ModelFitter(ModelParser):
     def run_transit_inference(self, pklpath, make_threadsafe=True):
         """
         Fit transit data for an Agol+19 transit. (Ignores any stellar
-        variability; believes error bars).  Free parameters are {"period",
-        "t0", "log_ror", "b", "u0", "u1"}.
+        variability).  Free parameters are {"period", "t0", "log_ror", "b",
+        "u0", "u1", "log_jitter"}.
         """
 
         p = self.priordict
 
         # if the model has already been run, pull the result from the
         # pickle. otherwise, run it.
-        if os.path.exists(pklpath):
+        if os.path.exists(pklpath) and not self.OVERWRITE:
             print(f'Found {pklpath}, loading from cache.')
             d = pickle.load(open(pklpath, 'rb'))
             self.model = d['model']
             self.trace = d['trace']
             self.map_estimate = d['map_estimate']
             return 1
+        elif os.path.exists(pklpath) and self.OVERWRITE:
+            print(f'Found {pklpath}, and OVERWRITE is True. '
+                  'Deleting and proceeding.')
+            os.remove(pklpath)
+
+        # assuming single instrument, get the data, and the instrument name
+        assert len(self.data.keys()) == 1
+        name = list(self.data.keys())[0]
+        x,y,yerr,texp = self.data[name]
 
         with pm.Model() as model:
 
@@ -198,6 +207,10 @@ class ModelFitter(ModelParser):
             rho_star = pm.Deterministic(
                 "rho_star", factor*10**logg_star / r_star
             )
+
+            # A jitter term describing excess white noise
+            log_jitter = pm.Normal("log_jitter", mu=np.log(np.mean(yerr)),
+                                   sd=p['log_jitter'][2])
 
             # fix Rp/Rs across bandpasses
             if p['log_ror'][0] == 'Uniform':
@@ -227,19 +240,25 @@ class ModelFitter(ModelParser):
             )
 
             # limb-darkening
-            u0 = pm.Uniform(
-                'u[0]', lower=p['u[0]'][1],
-                upper=p['u[0]'][2],
-                testval=p['u[0]'][3]
-            )
-            u1 = pm.Uniform(
-                'u[1]', lower=p['u[1]'][1],
-                upper=p['u[1]'][2],
-                testval=p['u[1]'][3]
-            )
-            u = [u0, u1]
+            if 'u[0]' in p.keys() and 'u[1]' in p.keys():
+                u0 = pm.Uniform(
+                    'u[0]', lower=p['u[0]'][1],
+                    upper=p['u[0]'][2],
+                    testval=p['u[0]'][3]
+                )
+                u1 = pm.Uniform(
+                    'u[1]', lower=p['u[1]'][1],
+                    upper=p['u[1]'][2],
+                    testval=p['u[1]'][3]
+                )
+                u_star = [u0, u1]
 
-            star = xo.LimbDarkLightCurve(u)
+            else:
+                assert 'u_star' in p.keys()
+                assert p['u_star'][0] == 'QuadLimbDark'
+                u_star = xo.QuadLimbDark("u_star")
+
+            star = xo.LimbDarkLightCurve(u_star)
 
             # Loop over "instruments" (TESS, then each ground-based lightcurve)
             parameters = dict()
@@ -279,11 +298,14 @@ class ModelFitter(ModelParser):
                 else:
                     raise NotImplementedError
 
-                # TODO: add error bar fudge in other models
                 likelihood = pm.Normal(
-                    f'{name}_obs', mu=lc_models[name], sigma=yerr, observed=y
+                    f'{name}_obs',
+                    mu=lc_models[name],
+                    sigma=pm.math.sqrt(
+                        yerr**2 + tt.exp(2 * log_jitter)
+                    ),
+                    observed=y
                 )
-
 
             #
             # Derived parameters

@@ -212,7 +212,6 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
         'u[1]':('({:.3f}; {:.3f})', 3, '--', "$u_2$"),
         'r_star':('({:.3f}; {:.3f})', 3, r'$R_\odot$', "$R_\star$"),
         'logg_star':('({:.3f}; {:.3f})', 3, 'cgs', "$\log g$"),
-        'mean':('({:.3f}; {:.3f})', 4, '--', r"$\langle f \rangle$"),
         'ecc':(None, 3, '--', r"$e^{(3)}$"),
         'omega':('({:.3f}; {:.3f})', 3, 'rad', r"$\omega$"),
         'log_jitter':('({:s}; {:.3f})', 3, '--', r"$\log \sigma_f$"),
@@ -233,6 +232,9 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
         'cosi':('--', 3, '--', '$\cos i$'),
         'T_14':('--', 3, 'hr', '$T_{14}$'),
         'T_13':('--', 3, 'hr', '$T_{13}$'),
+        'mean':('({:.3f}; {:.3f})', 4, '--', r"$\langle f \rangle$"),
+        'tess_mean':('({:.3f}; {:.3f})', 4, '--', r"$\langle f \rangle$"),
+        'kepler_mean':('({:.3f}; {:.3f})', 4, '--', r"$\langle f \rangle$"),
     }
 
     # make a dictionary, `pr`, with keys parameter name, and values latex
