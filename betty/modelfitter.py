@@ -251,6 +251,7 @@ class ModelFitter(ModelParser):
             else:
                 raise NotImplementedError
             ror = pm.Deterministic('ror', tt.exp(log_ror))
+            # planet radius in the same units as r_star
             r_pl = pm.Deterministic(
                 "r_pl", ror*r_star
             )
@@ -393,12 +394,6 @@ class ModelFitter(ModelParser):
             # Optimizing
             map_estimate = pm.find_MAP(model=model)
 
-            # start = model.test_point
-            # if 'transit' in self.modelcomponents:
-            #     map_estimate = xo.optimize(start=start,
-            #                                vars=[ror, b, period, t0])
-            # map_estimate = xo.optimize(start=map_estimate)
-
             if make_threadsafe:
                 pass
             else:
@@ -489,18 +484,6 @@ class ModelFitter(ModelParser):
                 # an "informed prior" approach.
                 u_star = xo.QuadLimbDark("u_star")
 
-                #u0 = pm.Uniform(
-                #    'u[0]', lower=p['u[0]'][1],
-                #    upper=p['u[0]'][2],
-                #    testval=p['u[0]'][3]
-                #)
-                #u1 = pm.Uniform(
-                #    'u[1]', lower=p['u[1]'][1],
-                #    upper=p['u[1]'][2],
-                #    testval=p['u[1]'][3]
-                #)
-                #u_star = [u0, u1]
-
                 # fix Rp/Rs across bandpasses
                 if p['log_ror'][0] == 'Uniform':
                     log_ror = pm.Uniform('log_ror', lower=p['log_ror'][1],
@@ -508,6 +491,7 @@ class ModelFitter(ModelParser):
                 else:
                     raise NotImplementedError
                 ror = pm.Deterministic('ror', tt.exp(log_ror))
+                # planet radius in the same units as r_star
                 r_pl = pm.Deterministic(
                     "r_pl", ror*r_star
                 )
@@ -541,26 +525,6 @@ class ModelFitter(ModelParser):
                     multi=False, shape=nplanets, fixed=True, observed=ecc
                 )
 
-                #
-                # RV stuff: for a future model implementation
-                #
-                # # RV jitter & a quadratic RV trend
-                # log_sigma_rv = pm.Normal(
-                #     "log_sigma_rv", mu=np.log(np.median(yerr_rv)), sd=5
-                # )
-                # trend = pm.Normal(
-                #     "trend", mu=0, sd=10.0 ** -np.arange(3)[::-1], shape=3
-                # )
-
-                # Transit jitter & GP parameters
-                # log_sigma_lc = pm.Normal(
-                #     "log_sigma_lc", mu=np.log(np.median(yerr[mask])), sd=10
-                # )
-                # log_rorho_gp = pm.Normal("log_rho_gp", mu=0.0, sd=10)
-                # log_sigma_gp = pm.Normal(
-                #     "log_sigma_gp", mu=np.log(np.std(y[mask])), sd=10
-                # )
-
                 # orbit model
                 orbit = xo.orbits.KeplerianOrbit(
                     period=period,
@@ -590,18 +554,6 @@ class ModelFitter(ModelParser):
                 # if relevant
                 light_curve = pm.math.sum(light_curves, axis=-1) + mean
                 resid = y[mask] - light_curve
-
-                ## Below is the GP model from the "together" tutorial. We'll use the GP
-                ## model from the stellar variability tutorial instead.  GP model for
-                ## the light curve
-                # kernel = terms.SHOTerm(
-                #     sigma=tt.exp(log_sigma_gp),
-                #     rho=tt.exp(log_rho_gp),
-                #     Q=1 / np.sqrt(2),
-                # )
-                # gp = GaussianProcess(kernel, t=x[mask], yerr=tt.exp(log_sigma_lc))
-                # gp.marginal("transit_obs", observed=resid)
-                # pm.Deterministic("gp_pred", gp.predict(resid))
 
                 # Use the GP model from the stellar variability tutorial
                 # https://gallery.exoplanet.codes/en/latest/tutorials/stellar-variability/
@@ -682,32 +634,6 @@ class ModelFitter(ModelParser):
                 # Compute the mean model prediction for plotting purposes
                 pm.Deterministic("gp_pred", gp.predict(resid))
 
-                # Commenting out the RV stuff
-                # And then include the RVs as in the RV tutorial
-                # x_rv_ref = 0.5 * (x_rv.min() + x_rv.max())
-
-                # def get_rv_model(t, name=""):
-                #     # First the RVs induced by the planets
-                #     vrad = orbit.get_radial_velocity(t)
-                #     pm.Deterministic("vrad" + name, vrad)
-
-                #     # Define the background model
-                #     A = np.vander(t - x_rv_ref, 3)
-                #     bkg = pm.Deterministic("bkg" + name, tt.dot(A, trend))
-
-                #     # Sum over planets and add the background to get the full model
-                #     return pm.Deterministic(
-                #         "rv_model" + name, tt.sum(vrad, axis=-1) + bkg
-                #     )
-
-                # # Define the model
-                # rv_model = get_rv_model(x_rv)
-                # get_rv_model(t_rv, name="_pred")
-
-                # # The likelihood for the RVs
-                # err = tt.sqrt(yerr_rv ** 2 + tt.exp(2 * log_sigma_rv))
-                # pm.Normal("obs", mu=rv_model, sd=err, observed=y_rv)
-
                 #
                 # Begin: derived parameters
                 #
@@ -785,19 +711,6 @@ class ModelFitter(ModelParser):
 
                 map_soln = start
 
-                # # RotationTerm: sigma_rot, prot, log_Q0, log_dQ, f
-                # # NOTE: all five no bueno. NOTE: sigma_rot, f, prot seems OK.
-                # map_soln = pmx.optimize(
-                #     start=map_soln,
-                #     vars=[sigma_rot, f, prot]
-                # )
-
-                # # SHO term: sigma, rho. Describes non-periodic variability.
-                # map_soln = pmx.optimize(
-                #     start=start,
-                #     vars=[sigma, rho]
-                # )
-
                 # Transit: [log_r, b, t0, period, r_star, logg_star, ecs,
                 # u_star]...]
                 map_soln = pmx.optimize(
@@ -806,34 +719,12 @@ class ModelFitter(ModelParser):
                           u_star]
                 )
 
-
                 # All GP terms + jitter and mean.
                 map_soln = pmx.optimize(
                     start=map_soln,
                     vars=[sigma_rot, prot, log_Q0, log_dQ, f, sigma, rho,
                           log_jitter, mean]
                 )
-
-
-                ## bonus
-                #map_soln = pmx.optimize(
-                #    start=map_soln,
-                #    vars=[log_r, b, log_Q0, log_dQ]
-                #)
-
-
-                # # Limb-darkening
-                # map_soln = pmx.optimize(
-                #     start=map_soln,
-                #     vars=[u0, u1]
-                # )
-
-
-                # # Jitter and mean:
-                # map_soln = pmx.optimize(
-                #     start=map_soln,
-                #     vars=[log_jitter, mean]
-                # )
 
                 # # Full optimization
                 map_soln = pmx.optimize(start=map_soln)
@@ -1020,6 +911,7 @@ class ModelFitter(ModelParser):
                 else:
                     raise NotImplementedError
 
+                # planet radius in the same units as r_star
                 r_pl = pm.Deterministic(
                     "r_pl", ror*r_star
                 )
@@ -1049,26 +941,6 @@ class ModelFitter(ModelParser):
                     "ecc_prior",
                     multi=False, shape=nplanets, fixed=True, observed=ecc
                 )
-
-                #
-                # RV stuff: for a future model implementation
-                #
-                # # RV jitter & a quadratic RV trend
-                # log_sigma_rv = pm.Normal(
-                #     "log_sigma_rv", mu=np.log(np.median(yerr_rv)), sd=5
-                # )
-                # trend = pm.Normal(
-                #     "trend", mu=0, sd=10.0 ** -np.arange(3)[::-1], shape=3
-                # )
-
-                # Transit jitter & GP parameters
-                # log_sigma_lc = pm.Normal(
-                #     "log_sigma_lc", mu=np.log(np.median(yerr[mask])), sd=10
-                # )
-                # log_rho_gp = pm.Normal("log_rho_gp", mu=0.0, sd=10)
-                # log_sigma_gp = pm.Normal(
-                #     "log_sigma_gp", mu=np.log(np.std(y[mask])), sd=10
-                # )
 
                 # orbit model
                 orbit = xo.orbits.KeplerianOrbit(
@@ -1194,8 +1066,8 @@ class ModelFitter(ModelParser):
                 sini = pm.Deterministic("sini", pm.math.sqrt( 1 - cosi**2 ))
 
                 #
-                # transit durations (T_14, T_13) for circular orbits. Winn+2010 Eq 14, 15.
-                # units: hours.
+                # transit durations (T_14, T_13) for circular orbits. Winn+2010
+                # Eq 14, 15.  units: hours.
                 #
                 T_14 = pm.Deterministic(
                     'T_14',
@@ -1428,6 +1300,7 @@ class ModelFitter(ModelParser):
                 log_ror = pm.Uniform('log_ror', lower=p['log_ror'][1],
                                    upper=p['log_ror'][2], testval=p['log_ror'][3])
                 ror = pm.Deterministic('ror', tt.exp(log_ror))
+                # planet radius in the same units as r_star
                 r_pl = pm.Deterministic(
                     "r_pl", ror*r_star
                 )
@@ -1548,15 +1421,6 @@ class ModelFitter(ModelParser):
                 a_Rs = pm.Deterministic(
                     "a_Rs", _a_Rs
                 )
-
-                # a_Rs = pm.Deterministic(
-                #     "a_Rs",
-                #     (rho_star * period**2)**(1/3)
-                #     *
-                #     (( (1*units.gram/(1*units.cm)**3) * (1*units.day**2)
-                #       * const.G / (3*np.pi)
-                #     )**(1/3)).cgs.value
-                # )
 
                 #
                 # cosi. assumes e=0 (e.g., Winn+2010 eq 7)
@@ -1742,7 +1606,7 @@ class ModelFitter(ModelParser):
                                            upper=p[f'{name}_log_ror'][2],
                                            testval=p[f'{name}_log_ror'][3])
                         ror = pm.Deterministic(f'{name}_ror', tt.exp(log_ror))
-                        # planet radius in jupiter radii
+                        # planet radius in the same units as r_star
                         r_pl = pm.Deterministic(
                             f"{name}_r_pl", ror*r_star
                         )
@@ -1789,45 +1653,6 @@ class ModelFitter(ModelParser):
                                 orbit=orbit, r=r_pl, t=x, texp=texp
                             ).T.flatten()
                         )
-
-                        # NOTE: some boilerplate below to give an idea for how one
-                        # might go about varying the transit depth.
-
-                        # elif self.modelid == 'alltransit_quaddepthvar':
-                        #     if name != 'tess':
-                        #         # midpoint for this definition of the quadratic trend
-                        #         _tmid = np.nanmedian(x)
-
-                        #         raise NotImplementedError('boilerplate')
-
-                        #         # do custom depth-to-
-                        #         if (name == 'elsauce_20200401' or
-                        #             name == 'elsauce_20200426'
-                        #         ):
-                        #             r = r_Rband
-                        #         elif name == 'elsauce_20200521':
-                        #             r = r_Tband
-                        #         elif name == 'elsauce_20200614':
-                        #             r = r_Bband
-
-                        #         transit_lc = star.get_light_curve(
-                        #             orbit=orbit, r=r_pl, t=x, texp=texp
-                        #         ).T.flatten()
-
-                        #         lc_models[name] = pm.Deterministic(
-                        #             f'{name}_mu_transit',
-                        #             mean +
-                        #             a1*(x-_tmid) +
-                        #             a2*(x-_tmid)**2 +
-                        #             transit_lc
-                        #         )
-
-                        #         roughdepths[name] = pm.Deterministic(
-                        #             f'{name}_roughdepth',
-                        #             pm.math.abs_(transit_lc).max()
-                        #         )
-
-                        # NOTE: end boilerplate
 
                     likelihood = pm.Normal(
                         f'{name}_obs', mu=lc_models[name],
@@ -1946,7 +1771,8 @@ class ModelFitter(ModelParser):
         Free parameters for the transit are {"period", "t0", "log_ror", "b",
         "u0", "u1", "log_jitter"}.
 
-        (The limb-darkening coefficients are shared across transit windows)
+        The limb-darkening coefficients are shared across transit windows.  A
+        single instrument (e.g., TESS, Kepler, K2) is assumed.
         """
 
         p = self.priordict
@@ -1997,6 +1823,7 @@ class ModelFitter(ModelParser):
                 else:
                     raise NotImplementedError
                 ror = pm.Deterministic('ror', tt.exp(log_ror))
+                # planet radius in the same units as r_star
                 r_pl = pm.Deterministic(
                     "r_pl", ror*r_star
                 )
@@ -2065,18 +1892,6 @@ class ModelFitter(ModelParser):
 
                         # midpoint for this definition of the quadratic trend
                         _tmid = np.nanmedian(x)
-
-                        # transit_lc = star.get_light_curve(
-                        #     orbit=orbit, r=r_pl, t=x, texp=texp
-                        # ).T.flatten()
-
-                        # lc_models[name] = pm.Deterministic(
-                        #     f'{name}_mu_transit',
-                        #     mean +
-                        #     a1*(x-_tmid) +
-                        #     a2*(x-_tmid)**2 +
-                        #     transit_lc
-                        # )
 
                         lc_models[name] = pm.Deterministic(
                             f'{name}_mu_transit',
@@ -2250,11 +2065,6 @@ class ModelFitter(ModelParser):
                 "b", mu=p['b'][1], sd=p['b'][2], testval=p['b'][1]
             )
 
-            # ecs = xo.UnitDisk("ecs", shape=(2, 1), testval=0.01 * np.ones((2, 1)))
-            # ecc = pm.Deterministic("ecc", tt.sum(ecs ** 2, axis=0))
-            # omega = pm.Deterministic("omega", tt.arctan2(ecs[1], ecs[0]))
-            # xo.eccentricity.vaneylen19("ecc_prior", multi=False, shape=1, observed=ecc)
-
             ecc = pm.Bound(pm.Normal, lower=0.001, upper=0.2)(
                 'ecc', mu=p['ecc'][1], sd=p['ecc'][2]
             )
@@ -2315,12 +2125,6 @@ class ModelFitter(ModelParser):
             # Optimizing
             map_estimate = pm.find_MAP(model=model)
 
-            # start = model.test_point
-            # if 'transit' in self.modelcomponents:
-            #     map_estimate = xo.optimize(start=start,
-            #                                vars=[r, b, period, t0])
-            # map_estimate = xo.optimize(start=map_estimate)
-
             if make_threadsafe:
                 pass
             else:
@@ -2350,4 +2154,3 @@ class ModelFitter(ModelParser):
         self.model = None
         self.trace = trace
         self.map_estimate = map_estimate
-
