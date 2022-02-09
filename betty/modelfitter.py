@@ -3,7 +3,8 @@ Full MAP and sampling recipes. Contents include:
 
 ModelParser
 ModelFitter
-    run_transit_inference
+    run_simpletransit_inference
+    run_localpolytransit_inference
     run_RotStochGPtransit_inference
     run_RotGPtransit_inference
     run_QuadMulticolorTransit_inference
@@ -71,8 +72,9 @@ class ModelParser:
 
     def verify_modelcomponents(self):
 
-        validcomponents = ['simpletransit', 'rvspotorbit', 'RotStochGPtransit',
-                           'RotGPtransit', 'allindivtransit', 'alltransit',
+        validcomponents = ['simpletransit', 'localpolytransit', 'rvspotorbit',
+                           'RotStochGPtransit', 'RotGPtransit',
+                           'allindivtransit', 'alltransit',
                            'QuadMulticolorTransit',
                            'QuadMulticolorVaryDepthTransit']
 
@@ -81,8 +83,8 @@ class ModelParser:
         for modelcomponent in self.modelcomponents:
             if modelcomponent not in validcomponents:
                 errmsg = (
-                    'Got modelcomponent {}. validcomponents include {}.'
-                    .format(modelcomponent, validcomponents)
+                    f'Got modelcomponent {modelcomponent}. '+
+                    f'validcomponents include {validcomponents}.'
                 )
                 raise ValueError(errmsg)
 
@@ -104,11 +106,10 @@ class ModelFitter(ModelParser):
         self.OVERWRITE = overwrite
 
         implemented_models = [
-            'simpletransit', 'localpolytransit', 'allindivtransit', 'oddindivtransit',
-            'evenindivtransit', 'rvorbit', 'rvspotorbit', 'alltransit',
-            'RotStochGPtransit', 'RotGPtransit',
-            'QuadMulticolorTransit',
-            'QuadMulticolorVaryDepthTransit'
+            'simpletransit', 'localpolytransit', 'allindivtransit',
+            'oddindivtransit', 'evenindivtransit', 'rvorbit', 'rvspotorbit',
+            'alltransit', 'RotStochGPtransit', 'RotGPtransit',
+            'QuadMulticolorTransit', 'QuadMulticolorVaryDepthTransit'
         ]
 
         if modelid in implemented_models:
@@ -140,7 +141,7 @@ class ModelFitter(ModelParser):
         )
         LOGINFO(updatestr)
         if modelid == 'simpletransit':
-            self.run_transit_inference(
+            self.run_simpletransit_inference(
                 pklpath, make_threadsafe=make_threadsafe
             )
 
@@ -163,6 +164,11 @@ class ModelFitter(ModelParser):
             self.run_RotGPtransit_inference(
                 pklpath, make_threadsafe=make_threadsafe,
                 map_optimization_method=map_optimization_method
+            )
+
+        elif modelid == 'localpolytransit':
+            self.run_localpolytransit_inference(
+                pklpath, make_threadsafe=make_threadsafe,
             )
 
         elif modelid == 'rvorbit':
@@ -190,7 +196,7 @@ class ModelFitter(ModelParser):
         LOGINFO(f'Finished PyMC3 for {modelid}...')
 
 
-    def run_transit_inference(self, pklpath, make_threadsafe=True):
+    def run_simpletransit_inference(self, pklpath, make_threadsafe=True):
         """
         Fit transit data for an Agol+19 transit. (Ignores any stellar
         variability).  Free parameters are {"period", "t0", "log_ror", "b",
@@ -210,7 +216,7 @@ class ModelFitter(ModelParser):
             return 1
         elif os.path.exists(pklpath) and self.OVERWRITE:
             LOGINFO(f'Found {pklpath}, and OVERWRITE is True. '
-                  'Deleting and proceeding.')
+                    'Deleting and proceeding.')
             os.remove(pklpath)
 
         # assuming single instrument, get the data, and the instrument name
@@ -1909,6 +1915,251 @@ class ModelFitter(ModelParser):
             'multicolorflux_vs_time_map_estimate_QuadMulticolorVaryDepthTransit.png'
         )
         bp.plot_multicolorlight_curve(self.data, map_estimate, outpath)
+
+        with model:
+            trace = pmx.sample(
+                tune=self.N_samples, draws=self.N_samples,
+                start=map_estimate, cores=self.N_cores,
+                chains=self.N_chains,
+                return_inferencedata=True,
+                initial_accept=0.8,
+                target_accept=0.95
+            )
+
+        with open(pklpath, 'wb') as buff:
+            pickle.dump({'model': model, 'trace': trace,
+                         'map_estimate': map_estimate}, buff)
+
+        self.model = model
+        self.trace = trace
+        self.map_estimate = map_estimate
+
+
+    def run_localpolytransit_inference(self, pklpath, make_threadsafe=True):
+        """
+        Each transit window gets a local second-order polynomial, plus a
+        Agol+19 transit.
+
+        Free parameters for the transit are {"period", "t0", "log_ror", "b",
+        "u0", "u1", "log_jitter"}.
+
+        (The limb-darkening coefficients are shared across transit windows)
+        """
+
+        p = self.priordict
+
+        # if the model has already been run, pull the result from the
+        # pickle. otherwise, run it.
+        if os.path.exists(pklpath) and not self.OVERWRITE:
+            LOGINFO(f'Found {pklpath}, loading from cache.')
+            d = pickle.load(open(pklpath, 'rb'))
+            self.model = d['model']
+            self.trace = d['trace']
+            self.map_estimate = d['map_estimate']
+            return 1
+        elif os.path.exists(pklpath) and self.OVERWRITE:
+            LOGINFO(f'Found {pklpath}, and OVERWRITE is True. '
+                    'Deleting and proceeding.')
+            os.remove(pklpath)
+
+        def build_model(start=None):
+
+            with pm.Model() as model:
+
+                # Shared parameters
+
+                # Stellar parameters. (Following tess.world notebooks).
+                logg_star = pm.Normal(
+                    "logg_star", mu=p['logg_star'][1], sd=p['logg_star'][2]
+                )
+
+                r_star = pm.Bound(pm.Normal, lower=0.0)(
+                    "r_star", mu=p['r_star'][1], sd=p['r_star'][2]
+                )
+                rho_star = pm.Deterministic(
+                    "rho_star", factor*10**logg_star / r_star
+                )
+
+                # A jitter term describing excess white noise
+                yerrs = np.concatenate(
+                    [_yerr for (_, (_, _, _yerr, _)) in self.data.items()]
+                ).ravel()
+                log_jitter = pm.Normal("log_jitter", mu=np.log(np.mean(yerrs)),
+                                       sd=p['log_jitter'][2])
+
+                # fix Rp/Rs across bandpasses
+                if p['log_ror'][0] == 'Uniform':
+                    log_ror = pm.Uniform('log_ror', lower=p['log_ror'][1],
+                                       upper=p['log_ror'][2], testval=p['log_ror'][3])
+                else:
+                    raise NotImplementedError
+                ror = pm.Deterministic('ror', tt.exp(log_ror))
+                r_pl = pm.Deterministic(
+                    "r_pl", ror*r_star
+                )
+
+                # Some orbital parameters
+                t0 = pm.Normal(
+                    "t0", mu=p['t0'][1], sd=p['t0'][2], testval=p['t0'][1]
+                )
+                period = pm.Normal(
+                    'period', mu=p['period'][1], sd=p['period'][2],
+                    testval=p['period'][1]
+                )
+                b = xo.distributions.ImpactParameter(
+                    "b", ror=ror, testval=p['b'][1]
+                )
+
+                orbit = xo.orbits.KeplerianOrbit(
+                    period=period, t0=t0, b=b, rho_star=rho_star, r_star=r_star
+                )
+
+                # limb-darkening
+                if 'u[0]' in p.keys() and 'u[1]' in p.keys():
+                    u0 = pm.Uniform(
+                        'u[0]', lower=p['u[0]'][1],
+                        upper=p['u[0]'][2],
+                        testval=p['u[0]'][3]
+                    )
+                    u1 = pm.Uniform(
+                        'u[1]', lower=p['u[1]'][1],
+                        upper=p['u[1]'][2],
+                        testval=p['u[1]'][3]
+                    )
+                    u_star = [u0, u1]
+
+                else:
+                    assert 'u_star' in p.keys()
+                    assert p['u_star'][0] == 'QuadLimbDark'
+                    u_star = xo.QuadLimbDark("u_star")
+
+                star = xo.LimbDarkLightCurve(u_star)
+
+                # Loop over "instruments" (TESS, then each ground-based lightcurve)
+                parameters = dict()
+                lc_models = dict()
+                roughdepths = dict()
+
+                for n, (name, (x, y, yerr, texp)) in enumerate(self.data.items()):
+
+                    # Define per-instrument parameters in a submodel, to not need
+                    # to prefix the names. Yields e.g., "TESS_mean",
+                    # "elsauce_0_mean", "elsauce_2_a2"
+                    with pm.Model(name=name, model=model):
+
+                        mean = pm.Normal(
+                            f'{name}_mean', mu=p[f'{name}_mean'][1],
+                            sd=p[f'{name}_mean'][2], testval=p[f'{name}_mean'][1]
+                        )
+                        a1 =  pm.Uniform(
+                            f'{name}_a1', lower=p[f'{name}_a1'][1],
+                            upper=p[f'{name}_a1'][2], testval=0
+                        )
+                        a2 = pm.Uniform(
+                            f'{name}_a2', lower=p[f'{name}_a2'][1],
+                            upper=p[f'{name}_a2'][2], testval=0
+                        )
+
+                        # midpoint for this definition of the quadratic trend
+                        _tmid = np.nanmedian(x)
+
+                        # transit_lc = star.get_light_curve(
+                        #     orbit=orbit, r=r_pl, t=x, texp=texp
+                        # ).T.flatten()
+
+                        # lc_models[name] = pm.Deterministic(
+                        #     f'{name}_mu_transit',
+                        #     mean +
+                        #     a1*(x-_tmid) +
+                        #     a2*(x-_tmid)**2 +
+                        #     transit_lc
+                        # )
+
+                        lc_models[name] = pm.Deterministic(
+                            f'{name}_mu_transit',
+                            mean +
+                            a1*(x-_tmid) +
+                            a2*(x-_tmid)**2 +
+                            star.get_light_curve(
+                                orbit=orbit, r=r_pl, t=x, texp=texp
+                            ).T.flatten()
+                        )
+
+                    likelihood = pm.Normal(
+                        f'{name}_obs', mu=lc_models[name],
+                        sigma=pm.math.sqrt(yerr**2 + tt.exp(2 * log_jitter)),
+                        observed=y
+                    )
+
+                #
+                # Derived parameters
+                #
+
+                # planet radius in jupiter radii
+                r_planet = pm.Deterministic(
+                    "r_planet", (ror*r_star)*( 1*units.Rsun/(1*units.Rjup) ).cgs.value
+                )
+
+                #
+                # eq 30 of winn+2010, ignoring planet density.
+                #
+                a_Rs = pm.Deterministic(
+                    "a_Rs",
+                    (rho_star * period**2)**(1/3)
+                    *
+                    (( (1*units.gram/(1*units.cm)**3) * (1*units.day**2)
+                      * const.G / (3*np.pi)
+                    )**(1/3)).cgs.value
+                )
+
+                #
+                # cosi. assumes e=0 (e.g., Winn+2010 eq 7)
+                #
+                cosi = pm.Deterministic("cosi", b / a_Rs)
+
+                # probably safer than tt.arccos(cosi)
+                sini = pm.Deterministic("sini", pm.math.sqrt( 1 - cosi**2 ))
+
+                #
+                # transit durations (T_14, T_13) for circular orbits. Winn+2010 Eq 14, 15.
+                # units: hours.
+                #
+                T_14 = pm.Deterministic(
+                    'T_14',
+                    (period/np.pi)*
+                    tt.arcsin(
+                        (1/a_Rs) * pm.math.sqrt( (1+ror)**2 - b**2 )
+                        * (1/sini)
+                    )*24
+                )
+
+                T_13 =  pm.Deterministic(
+                    'T_13',
+                    (period/np.pi)*
+                    tt.arcsin(
+                        (1/a_Rs) * pm.math.sqrt( (1-ror)**2 - b**2 )
+                        * (1/sini)
+                    )*24
+                )
+
+                # Optimizing
+                np.random.seed(42)
+                LOGINFO(model.check_test_point())
+                if start is None:
+                    start = model.test_point
+                map_soln = start
+
+                # By default, do full optimization
+                LOGINFO('Beginning optimization...')
+                map_soln = pmx.optimize(start=map_soln)
+
+                return model, map_soln
+
+        model, map_estimate = build_model()
+
+        LOGINFO(map_estimate)
+
+        LOGINFO('Got MAP estimate. Beginning sampling...')
 
         with model:
             trace = pmx.sample(
