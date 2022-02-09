@@ -15,6 +15,36 @@ MAP plots:
 Helper functions:
     doublemedian, doublemean, doublepctile, get_ylimguess
 """
+#############
+## LOGGING ##
+#############
+
+import logging
+from astrobase import log_sub, log_fmt, log_date_fmt
+
+DEBUG = False
+if DEBUG:
+    level = logging.DEBUG
+else:
+    level = logging.INFO
+LOGGER = logging.getLogger(__name__)
+logging.basicConfig(
+    level=level,
+    style=log_sub,
+    format=log_fmt,
+    datefmt=log_date_fmt,
+)
+
+LOGDEBUG = LOGGER.debug
+LOGINFO = LOGGER.info
+LOGWARNING = LOGGER.warning
+LOGERROR = LOGGER.error
+LOGEXCEPTION = LOGGER.exception
+
+#############
+## IMPORTS ##
+#############
+
 import os, corner, pickle
 from datetime import datetime
 from copy import deepcopy
@@ -61,7 +91,7 @@ def plot_fitindiv(m, summdf, outpath, overwrite=1, modelid=None):
         raise NotImplementedError
 
     if os.path.exists(outpath) and not overwrite:
-        print('found {} and no overwrite'.format(outpath))
+        LOGINFO('found {} and no overwrite'.format(outpath))
         return
 
     instrkeys = [k for k in m.priordict.keys() if '_mean' in k]
@@ -182,7 +212,7 @@ def plot_phasefold(m, summdf, outpath, overwrite=0, show_samples=0,
 
         y_mod_samples = []
         for ix, p in sample_params.iterrows():
-            print(ix)
+            LOGINFO(ix)
             paramd = dict(p)
             y_mod_samples.append(get_model_transit(paramd, d['x_obs']))
 
@@ -316,7 +346,7 @@ def plot_phasefold(m, summdf, outpath, overwrite=0, show_samples=0,
                 transform=trans
             )
 
-            print(f'Median error [ppt]: {_e:.2f}, errorfactor: {errorfactor*_e:.2f}')
+            LOGINFO(f'Median error [ppt]: {_e:.2f}, errorfactor: {errorfactor*_e:.2f}')
 
         else:
             raise NotImplementedError
@@ -324,7 +354,6 @@ def plot_phasefold(m, summdf, outpath, overwrite=0, show_samples=0,
     fig.tight_layout()
 
     savefig(fig, outpath, writepdf=savepdf, dpi=300)
-
 
 
 def plot_cornerplot(var_names, m, outpath, overwrite=1):
@@ -407,7 +436,7 @@ def plot_grounddepth(m, summdf, outpath, overwrite=1, modelid=None,
     set_style()
 
     if os.path.exists(outpath) and not overwrite:
-        print('found {} and no overwrite'.format(outpath))
+        LOGINFO('found {} and no overwrite'.format(outpath))
         return
 
     if modelid == 'simpletransit':
@@ -562,7 +591,7 @@ def plot_grounddepth(m, summdf, outpath, overwrite=1, modelid=None,
                 fmt='none', ecolor='black', alpha=1, elinewidth=1, capsize=2,
             )
 
-            print(f'{_e:.2f}, {errorfactor*_e:.2f}')
+            LOGINFO(f'{_e:.2f}, {errorfactor*_e:.2f}')
 
         shift += delta_y
 
@@ -811,15 +840,15 @@ def plot_phased_light_curve(
         med_error = np.nanmedian(yerr[mask])
         med_jitter = np.nanmedian(np.exp(medfunc(soln["log_jitter"])))
 
-        print(42*'-')
-        print(f'WRN! Median σ_f = {med_error:.2e}.  Median jitter = {med_jitter:.2e}')
-        print(42*'-')
+        LOGINFO(42*'-')
+        LOGINFO(f'WRN! Median σ_f = {med_error:.2e}.  Median jitter = {med_jitter:.2e}')
+        LOGINFO(42*'-')
 
     if (from_trace == False) or (map_estimate is not None):
         if map_estimate is not None:
             # If map_estimate is given, over-ride the mean/median estimate above,
             # take the MAP.
-            print('WRN! Overriding mean/median estimate with MAP.')
+            LOGINFO('WRN! Overriding mean/median estimate with MAP.')
             soln = deepcopy(map_estimate)
         _t0 = soln["t0"]
         _per = soln["period"]
@@ -905,7 +934,7 @@ def plot_phased_light_curve(
 
     if from_trace==True:
         sigma = 30
-        print(f'WRN! Smoothing plotted by by sigma={sigma}')
+        LOGINFO(f'WRN! Smoothing plotted by by sigma={sigma}')
         _g =  lambda a: gaussian_filter(a, sigma=sigma)
         art = ax.fill_between(
             scale_x(lc_modx), 1e3*_g(lc_mod_hi-lc_mody), 1e3*_g(lc_mod_lo-lc_mody),
@@ -941,8 +970,8 @@ def plot_phased_light_curve(
     if do_hacky_reprerror:
         sel = np.abs(orb_bd['binnedphases']*24)>3 # at least 3 hours from mid-transit
         binned_err = 1e3*np.nanstd((orb_bd['binnedmags'][sel]))
-        print(f'WRN! Overriding binned unc as the residuals. Binned_err = {binned_err:.4f} ppt')
-        #print(f'{_e:.2f}, {errorfactor*_e:.2f}')
+        LOGINFO(f'WRN! Overriding binned unc as the residuals. Binned_err = {binned_err:.4f} ppt')
+        #LOGINFO(f'{_e:.2f}, {errorfactor*_e:.2f}')
 
     _x,_y = 0.8*max(axd['A'].get_xlim()), 0.7*min(axd['A'].get_ylim())
     axd['A'].errorbar(
@@ -1038,7 +1067,7 @@ def plot_phased_subsets(
         if map_estimate is not None:
             # If map_estimate is given, over-ride the mean/median estimate above,
             # take the MAP.
-            print('WRN! Overriding mean/median estimate with MAP.')
+            LOGINFO('WRN! Overriding mean/median estimate with MAP.')
             soln = deepcopy(map_estimate)
         _t0 = soln["t0"]
         _per = soln["period"]
@@ -1202,7 +1231,7 @@ def plot_phased_subsets(
     # # NOTE: hacky approach: override it as the stddev of the residuals. This is
     # # dangerous, b/c if the errors are totally wrong, you might not know.
     # if do_hacky_reprerror:
-    #     print('WRN! Overriding binned unc as the residuals')
+    #     LOGINFO('WRN! Overriding binned unc as the residuals')
     #     binned_err = np.nanstd(1e3*(orb_bd['binnedmags']))
 
     # axd['A'].errorbar(
@@ -1211,10 +1240,209 @@ def plot_phased_subsets(
     #     transform=axd['A'].transAxes
     # )
 
-    #print(f'{_e:.2f}, {errorfactor*_e:.2f}')
+    #LOGINFO(f'{_e:.2f}, {errorfactor*_e:.2f}')
 
 
     fig.tight_layout(h_pad=0)
 
     savefig(fig, outpath, dpi=350)
     plt.close('all')
+
+
+def plot_phased_light_curve_samples(
+    data, soln, outpath, mask=None, from_trace=False,
+    ylimd=None, binsize_minutes=20, map_estimate=None, fullxlim=False, BINMS=3,
+    do_hacky_reprerror=False, alpha=0.1, n_samples=50
+):
+    """
+    Args:
+
+        data (OrderedDict): data['tess'] = (time, flux, flux_err, t_exp)
+
+        soln (az.data.inference_data.InferenceData): can be MAP solution from
+        PyMC3. can also be the posterior's trace itself (m.trace.posterior).
+        If the posterior is passed, bands showing the 2-sigma uncertainty
+        interval will be drawn.
+
+        outpath (str): where to save the output.
+
+        from_trace: True is using m.trace.posterior
+
+    Optional:
+
+        map_estimate: if passed, uses this as the "best fit" line. Otherwise,
+        the nanmean is used (nanmedian was also considered).
+
+    """
+
+    if not fullxlim:
+        scale_x = lambda x: x*24
+    else:
+        scale_x = lambda x: x
+
+    assert len(data.keys()) == 1
+    name = list(data.keys())[0]
+    x,y,yerr,texp = data[name]
+
+    if mask is None:
+        mask = np.ones(len(x), dtype=bool)
+
+    plt.close('all')
+    set_style()
+    fig = plt.figure(figsize=(0.66*5,0.66*6))
+    axd = fig.subplot_mosaic(
+        """
+        A
+        B
+        """,
+        gridspec_kw={
+            "height_ratios": [1,1]
+        }
+    )
+
+    assert from_trace
+
+    n_cores, n_chains, n_time = soln["gp_pred"].shape
+
+    np.random.seed(42)
+
+    ii = np.random.randint(low=0, high=n_cores, size=n_samples)
+    jj = np.random.randint(low=0, high=n_chains, size=n_samples)
+
+    LOGINFO(f"Random index: {ii},{jj}")
+
+    _t0 = soln["t0"][ii,jj].data.diagonal()
+    _per = soln["period"][ii,jj].data.diagonal()
+
+    # n_times x n_samples
+    gp_mod = (
+        soln["gp_pred"][ii,jj,:] +
+        soln["mean"][ii,jj]
+    ).data.diagonal()
+
+    lc_mod = (
+        np.sum(soln["light_curves"], axis=-1)[ii,jj,:]
+    ).data.diagonal()
+
+    _yerr = (
+        np.sqrt( (yerr[mask] ** 2)[:,None] +
+                (np.exp(2 * soln["log_jitter"][ii,jj].data.diagonal()))[None,:]
+               )
+    )
+
+    med_error = np.nanmedian(yerr[mask])
+    med_jitter = np.nanmedian(np.exp(soln["log_jitter"][ii,jj].data.diagonal()))
+
+    LOGINFO(42*'-')
+    LOGINFO(f'WRN! Median σ_f = {med_error:.2e}.  Median jitter = {med_jitter:.2e}')
+    LOGINFO(42*'-')
+
+    for nn in range(n_samples):
+
+        LOGINFO(f"{nn}/{n_samples}...")
+
+        x_fold = (x - _t0[nn] + 0.5 * _per[nn]) % _per[nn] - 0.5 * _per[nn]
+
+        #For plotting
+        lc_modx = x_fold[mask]
+        lc_mody = lc_mod[:,nn][np.argsort(lc_modx)]
+        lc_modx = np.sort(lc_modx)
+
+        if len(x_fold[mask]) > int(2e4):
+            # see https://github.com/matplotlib/matplotlib/issues/5907
+            mpl.rcParams['agg.path.chunksize'] = 10000
+
+        #
+        # begin the plot!
+        #
+        ax = axd['A']
+
+        y0 = (y[mask]-gp_mod[:,nn]) - np.nanmedian(y[mask]-gp_mod[:,nn])
+
+        binsize_days = (binsize_minutes / (60*24))
+        orb_bd = phase_bin_magseries(
+            x_fold[mask], y0, binsize=binsize_days, minbinelems=3
+        )
+        ax.scatter(
+            scale_x(orb_bd['binnedphases']), 1e3*(orb_bd['binnedmags']), color='k',
+            s=BINMS, linewidths=0, marker='.',
+            alpha=alpha, zorder=1002, rasterized=True#, linewidths=0.2, edgecolors='white'
+        )
+
+        ax.plot(scale_x(lc_modx), 1e3*lc_mody, color="C4", label="transit model",
+                lw=1, zorder=1001, alpha=alpha)
+
+        ax.set_xticklabels([])
+
+        # residual axis
+        ax = axd['B']
+        #ax.errorbar(24*x_fold[mask], 1e3*(y[mask] - gp_mod - lc_mod), yerr=1e3*_yerr,
+        #            color="darkgray", fmt='.', elinewidth=0.2, capsize=0,
+        #            markersize=1, rasterized=True)
+
+        y1 = (y[mask]-gp_mod[:,nn]-lc_mod[:,nn]) - np.nanmedian(y[mask]-gp_mod[:,nn]-lc_mod[:,nn])
+
+        binsize_days = (binsize_minutes / (60*24))
+        orb_bd = phase_bin_magseries(
+            x_fold[mask], y1, binsize=binsize_days, minbinelems=3
+        )
+        ax.scatter(
+            scale_x(orb_bd['binnedphases']), 1e3*(orb_bd['binnedmags']), color='k',
+            linewidths=0, marker='.',
+            s=BINMS, alpha=alpha, zorder=1002, rasterized=True#, linewidths=0.2, edgecolors='white'
+        )
+
+        if nn == 0:
+            ax.axhline(0, color="C4", lw=1, ls='-', zorder=1000)
+
+    ax.set_xlabel("Hours from mid-transit")
+    if fullxlim:
+        ax.set_xlabel("Days from mid-transit")
+
+    fig.text(-0.01,0.5, 'Relative flux [ppt]', va='center',
+             rotation=90)
+
+    for k,a in axd.items():
+        if not fullxlim:
+            a.set_xlim(-0.4*24,0.4*24)
+        else:
+            a.set_xlim(-_per/2,_per/2)
+        if isinstance(ylimd, dict):
+            a.set_ylim(ylimd[k])
+        else:
+            # sensible default guesses
+            _y = 1e3*(y[mask]-gp_mod)
+            axd['A'].set_ylim(get_ylimguess(_y))
+            _y = 1e3*(y[mask] - gp_mod - lc_mod)
+            axd['B'].set_ylim(get_ylimguess(_y))
+
+        format_ax(a)
+
+    # NOTE: alt approach: override it as the stddev of the residuals. This is
+    # dangerous, b/c if the errors are totally wrong, you might not know.
+    if do_hacky_reprerror:
+        sel = np.abs(orb_bd['binnedphases']*24)>3 # at least 3 hours from mid-transit
+        binned_err = 1e3*np.nanstd((orb_bd['binnedmags'][sel]))
+        LOGINFO(f'WRN! Overriding binned unc as the residuals. Binned_err = {binned_err:.4f} ppt')
+        #LOGINFO(f'{_e:.2f}, {errorfactor*_e:.2f}')
+
+    _x,_y = 0.8*max(axd['A'].get_xlim()), 0.7*min(axd['A'].get_ylim())
+    axd['A'].errorbar(
+        _x, _y, yerr=binned_err,
+        fmt='none', ecolor='black', alpha=1, elinewidth=0.5, capsize=2,
+        markeredgewidth=0.5
+    )
+    _x,_y = 0.8*max(axd['B'].get_xlim()), 0.6*min(axd['B'].get_ylim())
+    axd['B'].errorbar(
+        _x, _y, yerr=binned_err,
+        fmt='none', ecolor='black', alpha=1, elinewidth=0.5, capsize=2,
+        markeredgewidth=0.5
+    )
+
+    fig.tight_layout()
+
+    savefig(fig, outpath, dpi=350)
+    plt.close('all')
+
+
+
