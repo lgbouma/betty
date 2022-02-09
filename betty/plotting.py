@@ -9,7 +9,7 @@ Post-fit plots:
 MAP plots:
     plot_light_curve
     plot_multicolorlight_curve
-    plot_phased_light_curve
+    plot_phased_light_curve_gptransit
     plot_phased_subsets
 
 Helper functions:
@@ -63,7 +63,8 @@ from astrobase.lcmath import (
 )
 
 from betty.helpers import (
-    _get_fitted_data_dict, _get_fitted_data_dict_alltransit,
+    _get_fitted_data_dict_simpletransit,
+    _get_fitted_data_dict_localpolytransit, _get_fitted_data_dict_alltransit,
     _get_fitted_data_dict_allindivtransit, get_model_transit
 )
 from cdips.utils import astropytime_to_YYYYMMDD
@@ -170,10 +171,15 @@ def plot_phasefold(m, summdf, outpath, overwrite=0, show_samples=0,
     set_style()
 
     if modelid == 'simpletransit':
-        d, params, paramd = _get_fitted_data_dict(m, summdf)
+        d, params, paramd = _get_fitted_data_dict_simpletransit(m, summdf)
+        _d = d
+
+    elif modelid == 'localpolytransit':
+        d, params, paramd = _get_fitted_data_dict_localpolytransit(m, summdf)
         _d = d
 
     elif 'alltransit' in modelid:
+        raise NotImplementedError
         d = _get_fitted_data_dict_alltransit(m, summdf)
         _d = d['all']  # (could be "tess" too)
 
@@ -759,7 +765,7 @@ def get_ylimguess(y):
     return [ymin,ymax]
 
 
-def plot_phased_light_curve(
+def plot_phased_light_curve_gptransit(
     data, soln, outpath, mask=None, from_trace=False,
     ylimd=None, binsize_minutes=20, map_estimate=None, fullxlim=False, BINMS=3,
     do_hacky_reprerror=False, alpha=1

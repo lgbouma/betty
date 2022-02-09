@@ -863,7 +863,9 @@ class ModelFitter(ModelParser):
             self.PLOTDIR,
             'flux_vs_phase_map_estimate_RotStochGPtransit.png'
         )
-        bp.plot_phased_light_curve(self.data, map_estimate, outpath)
+        bp.plot_phased_light_curve_gptransit(
+            self.data, map_estimate, outpath
+        )
 
         LOGINFO('Got MAP estimate. Beginning sampling...')
         # sample from the posterior defined by this model.
@@ -1342,8 +1344,9 @@ class ModelFitter(ModelParser):
             self.PLOTDIR,
             'flux_vs_phase_map_estimate_RotGPtransit.png'
         )
-        bp.plot_phased_light_curve(self.data, map_estimate, outpath,
-                                   do_hacky_reprerror=True)
+        bp.plot_phased_light_curve_gptransit(
+            self.data, map_estimate, outpath, do_hacky_reprerror=True
+        )
 
         # sample from the posterior defined by this model.
 

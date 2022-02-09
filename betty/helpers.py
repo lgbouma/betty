@@ -7,7 +7,9 @@ Contents:
     _subset_cut: slice/trim LC to transit windows.
 
     get_model_transit: given parameters, evaluate LC model.
-    _get_fitted_data_dict: get params and model LCs from ModelFitter object.
+    _get_fitted_data_dict_simpletransit: get params and model LCs from
+        ModelFitter object.
+    _get_fitted_data_dict_localpolytransit: ditto.
     _get_fitted_data_dict_alltransit: ditto, for "alltransit" model.
 
     _estimate_mode: get mode of unimodal pdf given samples, via gaussian KDE.
@@ -192,7 +194,7 @@ def get_model_transit(paramd, time_eval, t_exp=2/(60*24)):
     return mu_transit.eval() + mean
 
 
-def _get_fitted_data_dict(m, summdf):
+def _get_fitted_data_dict_simpletransit(m, summdf):
 
     instrkeys = [k for k in m.priordict.keys() if '_mean' in k]
     if len(instrkeys) > 1:
