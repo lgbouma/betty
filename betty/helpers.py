@@ -20,7 +20,7 @@ Contents:
     _given_mag_get_flux
 """
 import os, collections
-import numpy as np, pandas as pd
+import numpy as np, pandas as pd, matplotlib.pyplot as plt
 from collections import OrderedDict
 
 from astropy.io import fits
@@ -136,7 +136,6 @@ def retrieve_tess_lcdata(lcfiles, provenance=None, merge_sectors=1,
     elif provenance == 'cdips':
         raise NotImplementedError('need to apply cdips quality flags')
 
-    #FIXME FIXME divding..
     _f = _d['flux'][sel]
     outd = {
         'time': _d['time'][sel],
@@ -161,10 +160,10 @@ def get_model_transit(paramd, time_eval, t_exp=2/(60*24)):
 
     try:
         ror = paramd['ror']
-        r_pl = ror * r_star
+        r_pl = ror# * r_star
     except KeyError:
-        log_ror = np.exp(paramd['log_ror'])
-        r_pl = np.exp(log_ror) * r_star
+        log_ror = paramd['log_ror']
+        r_pl = np.exp(log_ror)# * r_star
 
     b = paramd['b']
     ukey = 'u' if 'u[0]' in paramd.keys() else 'u_star'
@@ -206,17 +205,20 @@ def get_model_transit_quad(paramd, time_eval, _tmid, t_exp=2/(60*24),
     """
     period = paramd['period']
     t0 = paramd['t0']
-    try:
-        r = paramd['ror']
-    except KeyError:
-        r = np.exp(paramd['log_ror'])
-
-    b = paramd['b']
-    u0 = paramd['u[0]']
-    u1 = paramd['u[1]']
 
     r_star = paramd['r_star']
     logg_star = paramd['logg_star']
+
+    try:
+        ror = paramd['ror']
+        r_pl = ror# * r_star
+    except KeyError:
+        ror = np.exp(paramd['log_ror'])
+        r_pl = ror# * r_star
+
+    b = paramd['b']
+    u0 = paramd['u_star[0]']
+    u1 = paramd['u_star[1]']
 
     try:
         mean = paramd['mean']
@@ -266,7 +268,15 @@ def get_model_transit_quad(paramd, time_eval, _tmid, t_exp=2/(60*24),
     return mu_model, mu_trend
 
 
-def _get_fitted_data_dict_simpletransit(m, summdf):
+def _quicklcplot(time, flux, outpath):
+    fig, ax = plt.subplots(figsize=(12,4))
+    ax.scatter(time, flux, c='k', s=1)
+    fig.savefig(outpath, dpi=400, bbox_inches='tight')
+    print(f"Wrote {outpath}")
+
+
+
+def _get_fitted_data_dict_simpletransit(m, summdf, N_model_times=int(1e3)):
 
     instrkeys = [k for k in m.priordict.keys() if '_mean' in k]
     if len(instrkeys) > 1:
@@ -289,13 +299,127 @@ def _get_fitted_data_dict_simpletransit(m, summdf):
               f'{instr}_mean', 'r_star', 'logg_star']
 
     paramd = {k:summdf.loc[k, 'median'] for k in params}
+
+    x_mod = np.linspace(
+        d['x_obs'].min(), d['x_obs'].max(), N_model_times
+    )
+    d['x_mod'] = x_mod
+
     y_mod_median = get_model_transit(
+        paramd, d['x_mod'], t_exp=np.nanmedian(np.diff(d['x_obs']))
+    )
+    #_quicklcplot(d['x_mod'], y_mod_median, 'temp.png')
+
+    y_mod_median_at_xobs = get_model_transit(
         paramd, d['x_obs'], t_exp=np.nanmedian(np.diff(d['x_obs']))
     )
     d['y_mod'] = y_mod_median
-    d['y_resid'] = d['y_obs']-y_mod_median
+    d['y_resid'] = d['y_obs']-y_mod_median_at_xobs
+
+    assert len(d['x_mod']) == len(d['y_mod'])
 
     return d, params, paramd
+
+
+def _get_fitted_data_dict_localpolytransit(
+    m, summdf, bestfitmeans='median', singleinstrument='tess',
+    N_model_times=int(1e3)
+):
+    """
+    args:
+        bestfitmeans: "map", "median", "mean, "mode"; depending on which you
+        think will produce the better fitting model.
+
+        singleinstrument: string 'kepler', 'tess', 'k2'
+    """
+
+    d = OrderedDict()
+
+    instname = list(m.data.keys())[0].split('_')[0]
+
+    for name in m.data.keys():
+
+        d[name] = {}
+        d[name]['x_obs'] = m.data[name][0]
+        # d[name]['y_obs'] = m.data[name][1]
+        d[name]['y_err'] = m.data[name][2]
+
+        params = ['period', 't0', 'log_ror', 'b', 'u_star[0]', 'u_star[1]',
+                  'r_star', 'logg_star', f'{name}_mean', f'{name}_a1',
+                 f'{name}_a2']
+
+        _tmid = np.nanmedian(m.data[name][0])
+        t_exp = np.nanmedian(np.diff(m.data[name][0]))
+
+        if bestfitmeans == 'mode':
+            paramd = {}
+            for k in params:
+                paramd[k] = _estimate_mode(m.trace[k])
+        elif bestfitmeans == 'median':
+            paramd = {k : summdf.loc[k, 'median'] for k in params}
+        elif bestfitmeans == 'mean':
+            paramd = {k : summdf.loc[k, 'mean'] for k in params}
+        elif bestfitmeans == 'map':
+            paramd = {}
+            for k in params:
+                if 'u_star' not in k:
+                    paramd[k] = m.map_estimate[k]
+                else:
+                    paramd[k] = (
+                        m.map_estimate['u_star'][0] if k=='u_star[0]' else
+                        m.map_estimate['u_star'][1]
+                    )
+        else:
+            raise NotImplementedError
+
+        x_mod = np.linspace(
+            d[name]['x_obs'].min(), d[name]['x_obs'].max(), N_model_times
+        )
+
+        y_mod_median, y_mod_median_trend = (
+            get_model_transit_quad(paramd, x_mod, _tmid,
+                                   t_exp=t_exp, includemean=1)
+        )
+        y_mod_median_at_xobs, y_mod_median_trend_at_xobs = (
+            get_model_transit_quad(paramd, d[name]['x_obs'], _tmid,
+                                   t_exp=t_exp, includemean=1)
+        )
+
+        d[name]['x_mod'] = x_mod
+
+        # this is used for phase-folded data, with the local trend removed.
+        d[name]['y_mod'] = y_mod_median - y_mod_median_trend
+
+        # NOTE: for this case, the "residual" of the observation minus the
+        # quadratic trend is actually the "observation" (containing only the
+        # transit, with the rotation signal removed)
+        d[name]['y_obs'] = m.data[name][1] - y_mod_median_trend_at_xobs
+
+        # the "full residual" is of the observation minus the quadratic trend
+        # minus the transit model minus the transit
+        d[name]['y_resid'] = m.data[name][1] - y_mod_median_at_xobs
+
+        d[name]['params'] = params
+
+        assert len(d[name]['x_mod']) == len(d[name]['y_mod'])
+
+    # merge all the singleinstrument transits:
+    # access time via e.g., d['tess']['x_obs']
+    n_singleinstrument = len([k for k in d.keys() if singleinstrument in k])
+    d[singleinstrument] = {}
+    d['all'] = {}
+    _p = ['x_obs', 'y_obs', 'y_err', 'y_resid', 'y_mod', 'x_mod']
+    for p in _p:
+        d[singleinstrument][p] = np.hstack(
+            [d[f'{singleinstrument}_{ix}'][p] for ix in
+             range(n_singleinstrument)]
+        )
+    for p in _p:
+        d['all'][p] = np.hstack(
+            [d[f'{k}'][p] for k in d.keys() if '_' in k]
+        )
+
+    return d
 
 
 def _get_fitted_data_dict_alltransit(m, summdf):

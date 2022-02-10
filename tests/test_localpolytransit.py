@@ -110,11 +110,16 @@ def test_localpolytransit(starid='TIC_117689799', N_samples=1000):
 
     if phaseplot:
         outpath = join(PLOTDIR, f'{starid}_{modelid}_phaseplot.png')
-        bp.plot_phasefold(m, summdf, outpath, modelid=modelid, inppt=1)
+        bp.plot_phasefold(m, summdf, outpath, modelid=modelid, inppt=1,
+                          binsize_minutes=15, singleinstrument='tess')
 
     if fitindiv:
-        outpath = join(PLOTDIR, f'{starid}_{modelid}_fitindiv.png')
-        bp.plot_fitindiv(m, summdf, outpath, modelid=modelid)
+        outpath = join(PLOTDIR, f'{starid}_{modelid}_fitindivpanels.png')
+        bp.plot_fitindivpanels(m, summdf, outpath, modelid=modelid,
+                               singleinstrument='tess')
+        #FIXME FIXME FIXME TODO TODO TODO:
+        # TODO : IMPLEMENT "FITINDIVPANELS"
+        assert 0
 
     if posttable:
         outpath = join(PLOTDIR, f'{starid}_{modelid}_trimmed_posteriortable.tex')

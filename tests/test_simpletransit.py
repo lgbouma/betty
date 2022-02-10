@@ -122,7 +122,6 @@ def test_simpletransit(starid='WASP_4', N_samples=1000):
         bp.plot_cornerplot(list(priordict), m, outpath)
 
 
-
 if __name__ == "__main__":
     test_simpletransit(starid='WASP_4', N_samples=1000)
     #test_simpletransit(starid='HAT-P-14', N_samples=5000)

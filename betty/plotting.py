@@ -80,7 +80,8 @@ from astropy.time import Time
 import matplotlib.transforms as transforms
 import arviz as az
 
-def plot_fitindiv(m, summdf, outpath, overwrite=1, modelid=None):
+def plot_fitindiv(m, summdf, outpath, overwrite=1, modelid=None,
+                  singleinstrument='tess'):
     """
     Plot of flux timeseries, with individual transit windows and fits
     underneath.
@@ -88,12 +89,25 @@ def plot_fitindiv(m, summdf, outpath, overwrite=1, modelid=None):
 
     set_style()
 
-    if modelid not in ['simpletransit', 'allindivtransit']:
+    if modelid not in ['simpletransit', 'allindivtransit', 'localpolytransit']:
         raise NotImplementedError
 
     if os.path.exists(outpath) and not overwrite:
         LOGINFO('found {} and no overwrite'.format(outpath))
         return
+
+    if modelid == 'simpletransit':
+        d, params, paramd = _get_fitted_data_dict_simpletransit(
+            m, summdf
+        )
+        _d = d
+
+    elif modelid == 'localpolytransit':
+        raise NotImplementedError('not the right plot for this model')
+        d = _get_fitted_data_dict_localpolytransit(
+            m, summdf, bestfitmeans='map'
+        )
+        _d = d[singleinstrument]
 
     instrkeys = [k for k in m.priordict.keys() if '_mean' in k]
     if len(instrkeys) > 1:
@@ -102,9 +116,9 @@ def plot_fitindiv(m, summdf, outpath, overwrite=1, modelid=None):
     instr = instrkeys[0].split('_')[0]
 
     time, flux, flux_err = (
-        m.data[instr][0],
-        m.data[instr][1],
-        m.data[instr][2]
+        _d['x_obs'],
+        _d['y_obs'],
+        _d['y_err']
     )
 
     t_offset = np.nanmin(time)
@@ -156,10 +170,9 @@ def plot_fitindiv(m, summdf, outpath, overwrite=1, modelid=None):
     savefig(fig, outpath, writepdf=0, dpi=300)
 
 
-def plot_phasefold(m, summdf, outpath, overwrite=0, show_samples=0,
-                   modelid=None, inppt=0, showerror=1, xlim=None,
-                   ylim=None, binsize_minutes=10, savepdf=0
-                  ):
+def plot_phasefold(m, summdf, outpath, overwrite=0, modelid=None, inppt=0,
+                   showerror=1, xlim=None, ylim=None, binsize_minutes=10,
+                   savepdf=0, singleinstrument='tess'):
     """
     Options:
         inppt: Whether to median subtract and give flux in units of 1e-3.
@@ -171,12 +184,16 @@ def plot_phasefold(m, summdf, outpath, overwrite=0, show_samples=0,
     set_style()
 
     if modelid == 'simpletransit':
-        d, params, paramd = _get_fitted_data_dict_simpletransit(m, summdf)
+        d, params, paramd = _get_fitted_data_dict_simpletransit(
+            m, summdf
+        )
         _d = d
 
     elif modelid == 'localpolytransit':
-        d, params, paramd = _get_fitted_data_dict_localpolytransit(m, summdf)
-        _d = d
+        d = _get_fitted_data_dict_localpolytransit(
+            m, summdf, bestfitmeans='map'
+        )
+        _d = d[singleinstrument]
 
     elif 'alltransit' in modelid:
         raise NotImplementedError
@@ -203,35 +220,15 @@ def plot_phasefold(m, summdf, outpath, overwrite=0, show_samples=0,
         orb_d['phase'], orb_d['mags'], binsize=binsize_phase, minbinelems=3
     )
     mod_d = phase_magseries(
-        _d['x_obs'], _d['y_mod'], P_orb, t0_orb, wrap=True, sort=True
+        _d['x_mod'], _d['y_mod'], P_orb, t0_orb, wrap=True, sort=True
+    )
+    resid_d = phase_magseries(
+        _d['x_obs'], _d['y_resid'], P_orb, t0_orb, wrap=True, sort=True
     )
     resid_bd = phase_bin_magseries(
-        mod_d['phase'], orb_d['mags'] - mod_d['mags'], binsize=binsize_phase,
+        resid_d['phase'], resid_d['mags'], binsize=binsize_phase,
         minbinelems=3
     )
-
-    # get the samples. shape: N_samples x N_time
-    if show_samples:
-        np.random.seed(42)
-        N_samples = 20
-
-        sample_df = pm.trace_to_dataframe(m.trace, var_names=params)
-        sample_params = sample_df.sample(n=N_samples, replace=False)
-
-        y_mod_samples = []
-        for ix, p in sample_params.iterrows():
-            LOGINFO(ix)
-            paramd = dict(p)
-            y_mod_samples.append(get_model_transit(paramd, d['x_obs']))
-
-        y_mod_samples = np.vstack(y_mod_samples)
-
-        mod_ds = {}
-        for i in range(N_samples):
-            mod_ds[i] = phase_magseries(
-                d['x_obs'], y_mod_samples[i, :], P_orb, t0_orb, wrap=True,
-                sort=True
-            )
 
     # make tha plot
     plt.close('all')
@@ -259,7 +256,7 @@ def plot_phasefold(m, summdf, outpath, overwrite=0, show_samples=0,
 
     else:
 
-        ydiff = 1
+        ydiff = 1 if modelid == 'simpletransit' else 0
 
         a0.scatter(orb_d['phase']*P_orb*24, 1e3*(orb_d['mags']-ydiff),
                    color='darkgray', s=7, alpha=0.35, zorder=3, linewidths=0,
@@ -270,7 +267,7 @@ def plot_phasefold(m, summdf, outpath, overwrite=0, show_samples=0,
         a0.plot(mod_d['phase']*P_orb*24, 1e3*(mod_d['mags']-ydiff),
                 color='gray', alpha=0.8, rasterized=False, lw=1, zorder=4)
 
-        a1.scatter(orb_d['phase']*P_orb*24, 1e3*(orb_d['mags']-mod_d['mags']),
+        a1.scatter(resid_d['phase']*P_orb*24, 1e3*(resid_d['mags']),
                    color='darkgray', s=7, alpha=0.5, zorder=3, linewidths=0,
                    rasterized=True)
         a1.scatter(resid_bd['binnedphases']*P_orb*24,
@@ -279,40 +276,6 @@ def plot_phasefold(m, summdf, outpath, overwrite=0, show_samples=0,
         a1.plot(mod_d['phase']*P_orb*24, 1e3*(mod_d['mags']-mod_d['mags']),
                 color='gray', alpha=0.8, rasterized=False, lw=1, zorder=4)
 
-
-    if show_samples:
-        # NOTE: this comes out looking "bad" because if you phase up a model
-        # with a different period to the data, it will produce odd
-        # aliases/spikes.
-
-        xvals, yvals = [], []
-        for i in range(N_samples):
-            xvals.append(mod_ds[i]['phase']*P_orb*24)
-            yvals.append(mod_ds[i]['mags'])
-            a0.plot(mod_ds[i]['phase']*P_orb*24, mod_ds[i]['mags'], color='C1',
-                    alpha=0.2, rasterized=True, lw=0.2, zorder=-2)
-            a1.plot(mod_ds[i]['phase']*P_orb*24,
-                    mod_ds[i]['mags']-mod_d['mags'], color='C1', alpha=0.2,
-                    rasterized=True, lw=0.2, zorder=-2)
-
-        # # N_samples x N_times
-        # from scipy.ndimage import gaussian_filter1d
-        # xvals, yvals = nparr(xvals), nparr(yvals)
-        # model_phase = xvals.mean(axis=0)
-        # g_std = 100
-        # n_std = 2
-        # mean = gaussian_filter1d(yvals.mean(axis=0), g_std)
-        # diff = gaussian_filter1d(n_std*yvals.std(axis=0), g_std)
-        # model_flux_lower = mean - diff
-        # model_flux_upper = mean + diff
-
-        # ax.plot(model_phase, model_flux_lower, color='C1',
-        #         alpha=0.8, lw=0.5, zorder=3)
-        # ax.plot(model_phase, model_flux_upper, color='C1', alpha=0.8,
-        #         lw=0.5, zorder=3)
-        # ax.fill_between(model_phase, model_flux_lower, model_flux_upper,
-        #                 color='C1', alpha=0.5, zorder=3, linewidth=0)
-
     if not inppt:
         a0.set_ylabel('Relative flux', fontsize='small')
     else:
@@ -320,9 +283,9 @@ def plot_phasefold(m, summdf, outpath, overwrite=0, show_samples=0,
     a1.set_ylabel('Residual [ppt]', fontsize='small')
     a1.set_xlabel('Hours from mid-transit', fontsize='small')
 
-    yv = orb_d['mags']-mod_d['mags']
+    yv = resid_d['mags']
     if inppt:
-        yv = 1e3*(orb_d['mags']-mod_d['mags'])
+        yv = 1e3*(resid_d['mags'])
     a1.set_ylim((np.nanmedian(yv)-3.2*np.nanstd(yv),
                  np.nanmedian(yv)+3.2*np.nanstd(yv) ))
 
