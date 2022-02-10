@@ -18,6 +18,8 @@ Contents:
     get_tic117689799_lightcurve: ditto
 
     _given_mag_get_flux
+
+    _quicklcplot
 """
 import os, collections
 import numpy as np, pandas as pd, matplotlib.pyplot as plt
@@ -746,3 +748,11 @@ def _given_mag_get_flux(mag, err_mag=None):
         err_flux /= fluxmedian
 
         return flux, err_flux
+
+
+def _quicklcplot(time, flux, flux_err, outpath):
+    fig, ax = plt.subplots(figsize=(12,4))
+    ax.errorbar(time, flux, yerr=flux_err, fmt='none', ecolor='k',
+                elinewidth=0.5, capsize=2, mew=0.5)
+    fig.savefig(outpath, dpi=400, bbox_inches='tight')
+    print(f"Wrote {outpath}")

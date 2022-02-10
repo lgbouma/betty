@@ -16,25 +16,18 @@ from importlib.machinery import SourceFileLoader
 from astrobase.lcmath import find_lc_timegroups
 
 from betty.helpers import (
-    get_tic117689799_lightcurve, _subset_cut
+    get_tic117689799_lightcurve, _subset_cut, _quicklcplot
 )
 from betty.posterior_table import make_posterior_table
 from betty.modelfitter import ModelFitter
 from betty.paths import TESTDATADIR, TESTRESULTSDIR, BETTYDIR
+from betty.io import given_priordict_make_priorfile
 
 EPHEMDICT = {
     'WASP_4': {'t0': 1355.1845, 'per': 1.338231466, 'tdur':2.5/24},
     'HAT-P-14': {'t0': 1984.6530, 'per': 4.62787, 'tdur':2.5/24},
     'TIC_117689799': {'t0': 2458684.712181, 'per': 2.157913, 'tdur':2/24},
 }
-
-def _quicklcplot(time, flux, flux_err, outpath):
-    fig, ax = plt.subplots(figsize=(12,4))
-    ax.errorbar(time, flux, yerr=flux_err, fmt='none', ecolor='k',
-                elinewidth=0.5, capsize=2, mew=0.5)
-    fig.savefig(outpath, dpi=400, bbox_inches='tight')
-    print(f"Wrote {outpath}")
-
 
 @pytest.mark.skip(reason="PyMC3 sampling too cray for Github Actions.")
 def test_localpolytransit(starid='TIC_117689799', N_samples=1000):
@@ -87,6 +80,7 @@ def test_localpolytransit(starid='TIC_117689799', N_samples=1000):
             priordict[f'{name}_mean'] = ('Normal', 1, 0.1)
             priordict[f'{name}_a1'] = ('Uniform', -0.1, 0.1)
             priordict[f'{name}_a2'] = ('Uniform', -0.1, 0.1)
+    given_priordict_make_priorfile(priordict, priorpath)
 
     pklpath = join(BETTYDIR, f'test_{starid}_{modelid}.pkl')
 
@@ -100,7 +94,7 @@ def test_localpolytransit(starid='TIC_117689799', N_samples=1000):
                         kind='stats', stat_funcs={'median':np.nanmedian},
                         extend=True)
 
-    fitindiv = 1
+    fitindivpanels = 1
     phaseplot = 1
     cornerplot = 1
     posttable = 1
@@ -114,7 +108,7 @@ def test_localpolytransit(starid='TIC_117689799', N_samples=1000):
         bp.plot_phasefold(m, summdf, outpath, modelid=modelid, inppt=1,
                           binsize_minutes=15, singleinstrument='tess')
 
-    if fitindiv:
+    if fitindivpanels:
         outpath = join(PLOTDIR, f'{starid}_{modelid}_fitindivpanels.png')
         bp.plot_fitindivpanels(m, summdf, outpath, modelid=modelid,
                                singleinstrument='tess')
