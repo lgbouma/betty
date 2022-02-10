@@ -21,6 +21,34 @@ Contents:
 
     _quicklcplot
 """
+#############
+## LOGGING ##
+#############
+import logging
+from astrobase import log_sub, log_fmt, log_date_fmt
+
+DEBUG = False
+if DEBUG:
+    level = logging.DEBUG
+else:
+    level = logging.INFO
+LOGGER = logging.getLogger(__name__)
+logging.basicConfig(
+    level=level,
+    style=log_sub,
+    format=log_fmt,
+    datefmt=log_date_fmt,
+)
+
+LOGDEBUG = LOGGER.debug
+LOGINFO = LOGGER.info
+LOGWARNING = LOGGER.warning
+LOGERROR = LOGGER.error
+LOGEXCEPTION = LOGGER.exception
+
+#############
+## IMPORTS ##
+#############
 import os, collections
 import numpy as np, pandas as pd, matplotlib.pyplot as plt
 from collections import OrderedDict
@@ -270,14 +298,6 @@ def get_model_transit_quad(paramd, time_eval, _tmid, t_exp=2/(60*24),
     return mu_model, mu_trend
 
 
-def _quicklcplot(time, flux, outpath):
-    fig, ax = plt.subplots(figsize=(12,4))
-    ax.scatter(time, flux, c='k', s=1)
-    fig.savefig(outpath, dpi=400, bbox_inches='tight')
-    print(f"Wrote {outpath}")
-
-
-
 def _get_fitted_data_dict_simpletransit(m, summdf, N_model_times=int(1e3)):
 
     instrkeys = [k for k in m.priordict.keys() if '_mean' in k]
@@ -326,7 +346,7 @@ def _get_fitted_data_dict_simpletransit(m, summdf, N_model_times=int(1e3)):
 def _get_fitted_data_dict_localpolytransit(
     m, summdf, bestfitmeans='median', singleinstrument='tess',
     N_model_times=int(1e3)
-):
+    ):
     """
     args:
         bestfitmeans: "map", "median", "mean, "mode"; depending on which you
@@ -483,7 +503,7 @@ def _get_fitted_data_dict_allindivtransit(m, summdf, bestfitmeans='median'):
         if bestfitmeans == 'mode':
             paramd = {}
             for k in params:
-                print(name, k)
+                LOGINFO(name, k)
                 paramd[k] = _estimate_mode(m.trace[k])
         elif bestfitmeans == 'median':
             paramd = {k : summdf.loc[k, 'median'] for k in params}
@@ -559,10 +579,10 @@ def _subset_cut(x_obs, y_obs, y_err, n=12, t0=None, per=None, tdur=None,
         s = (x_obs > start_time) & (x_obs < end_time)
         sel |= s
 
-    print(42*'#')
-    print(f'Before subset cut: {len(x_obs)} observations.')
-    print(f'After subset cut: {len(x_obs[sel])} observations.')
-    print(42*'#')
+    LOGINFO(42*'#')
+    LOGINFO(f'Before subset cut: {len(x_obs)} observations.')
+    LOGINFO(f'After subset cut: {len(x_obs[sel])} observations.')
+    LOGINFO(42*'#')
 
     x_obs = x_obs[sel]
     y_obs = y_obs[sel]
@@ -590,10 +610,10 @@ def _get_flux_err_as_stdev(x_obs, y_obs, t0=None, per=None, tdur=None):
         s = (x_obs > start_time) & (x_obs < end_time)
         intra |= s
 
-    print(42*'#')
-    print(f'Number of in-transit points: {len(x_obs[intra])}.')
-    print(f'Omitting them for the estimation of time-series stdev...')
-    print(42*'#')
+    LOGINFO(42*'#')
+    LOGINFO(f'Number of in-transit points: {len(x_obs[intra])}.')
+    LOGINFO(f'Omitting them for the estimation of time-series stdev...')
+    LOGINFO(42*'#')
 
     y_err = np.nanstd(y_obs[~intra])
 
@@ -755,4 +775,4 @@ def _quicklcplot(time, flux, flux_err, outpath):
     ax.errorbar(time, flux, yerr=flux_err, fmt='none', ecolor='k',
                 elinewidth=0.5, capsize=2, mew=0.5)
     fig.savefig(outpath, dpi=400, bbox_inches='tight')
-    print(f"Wrote {outpath}")
+    LOGINFO(f"Wrote {outpath}")
