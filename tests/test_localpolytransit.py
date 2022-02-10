@@ -20,7 +20,6 @@ from betty.helpers import (
 )
 from betty.posterior_table import make_posterior_table
 from betty.modelfitter import ModelFitter
-import betty.plotting as bp
 from betty.paths import TESTDATADIR, TESTRESULTSDIR, BETTYDIR
 
 EPHEMDICT = {
@@ -107,6 +106,8 @@ def test_localpolytransit(starid='TIC_117689799', N_samples=1000):
     posttable = 1
 
     PLOTDIR = TESTRESULTSDIR
+
+    import betty.plotting as bp
 
     if phaseplot:
         outpath = join(PLOTDIR, f'{starid}_{modelid}_phaseplot.png')
