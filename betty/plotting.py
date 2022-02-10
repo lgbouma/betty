@@ -13,6 +13,7 @@ MAP plots:
     plot_phased_subsets
 
 Helper functions:
+    given_N_axes_get_3col_mosaic_subplots
     doublemedian, doublemean, doublepctile, get_ylimguess
 """
 #############
@@ -52,10 +53,8 @@ from glob import glob
 import numpy as np, matplotlib.pyplot as plt, pandas as pd, pymc3 as pm
 import matplotlib as mpl
 from numpy import array as nparr
-from scipy.ndimage import gaussian_filter
 
-from aesthetic.plot import savefig, format_ax
-from aesthetic.plot import set_style
+from aesthetic.plot import savefig, format_ax, set_style
 
 from astrobase.lcmath import (
     phase_magseries, phase_bin_magseries, sigclip_magseries,
@@ -67,7 +66,6 @@ from betty.helpers import (
     _get_fitted_data_dict_localpolytransit, _get_fitted_data_dict_alltransit,
     _get_fitted_data_dict_allindivtransit, get_model_transit
 )
-from cdips.utils import astropytime_to_YYYYMMDD
 
 from astrobase import periodbase
 from astrobase.plotbase import skyview_stamp
@@ -78,7 +76,7 @@ from astropy.io import fits
 from astropy.time import Time
 
 import matplotlib.transforms as transforms
-import arviz as az
+from matplotlib.ticker import FormatStrFormatter
 
 def plot_fitindiv(m, summdf, outpath, overwrite=1, modelid=None,
                   singleinstrument='tess'):
@@ -93,7 +91,7 @@ def plot_fitindiv(m, summdf, outpath, overwrite=1, modelid=None,
         raise NotImplementedError
 
     if os.path.exists(outpath) and not overwrite:
-        LOGINFO('found {} and no overwrite'.format(outpath))
+        LOGINFO(f'found {outpath} and no overwrite')
         return
 
     if modelid == 'simpletransit':
@@ -426,6 +424,9 @@ def plot_grounddepth(m, summdf, outpath, overwrite=1, modelid=None,
     period = summdf.T['period'].loc['mean']
 
     tra_dict = {}
+
+    from cdips.utils import astropytime_to_YYYYMMDD
+
     for k in list(d.keys()):
         if 'ground' in k:
 
@@ -731,7 +732,7 @@ def plot_phased_light_curve_gptransit(
     data, soln, outpath, mask=None, from_trace=False,
     ylimd=None, binsize_minutes=20, map_estimate=None, fullxlim=False, BINMS=3,
     do_hacky_reprerror=False, alpha=1
-):
+    ):
     """
     Args:
 
@@ -891,6 +892,7 @@ def plot_phased_light_curve_gptransit(
     ax.axhline(0, color="C4", lw=1, ls='-', zorder=1000)
 
     if from_trace==True:
+        from scipy.ndimage import gaussian_filter
         sigma = 30
         LOGINFO(f'WRN! Smoothing plotted by by sigma={sigma}')
         _g =  lambda a: gaussian_filter(a, sigma=sigma)
@@ -953,7 +955,7 @@ def plot_phased_subsets(
     data, soln, outpath, timesubsets, mask=None, from_trace=False,
     ylimd=None, binsize_minutes=20, map_estimate=None, fullxlim=False, BINMS=3,
     do_hacky_reprerror=False, yoffsetNsigma=4, inch_per_subset=1
-):
+    ):
     """
     Args:
 
@@ -1157,7 +1159,7 @@ def plot_phased_light_curve_samples(
     data, soln, outpath, mask=None, from_trace=False,
     ylimd=None, binsize_minutes=20, map_estimate=None, fullxlim=False, BINMS=3,
     do_hacky_reprerror=False, alpha=0.1, n_samples=50
-):
+    ):
     """
     Args:
 
@@ -1345,4 +1347,56 @@ def plot_phased_light_curve_samples(
     plt.close('all')
 
 
+def given_N_axes_get_3col_mosaic_subplots(N_axes, return_axstr=0):
+    """
+    Given the number of axes required, generate a figure and axd subplot
+    instance, with 3 columns, and however many rows are needed.
+    """
 
+    assert isinstance(N_axes, int)
+
+    N_cols = 3
+
+    N_rows = int(np.ceil(N_axes / N_cols))
+    N_hanging = N_axes % N_cols  # hanging = number "floating" in the final row
+
+    fig = plt.figure(figsize=(6,3*N_rows))
+
+    axstr = ''
+
+    if N_hanging == 0:
+        # e.g., '\n012\n345\n'
+        for i in range(N_axes):
+            if i % N_cols == 0:
+                axstr += f'\n{i}'
+            else:
+                axstr += f'{i}'
+        axstr += '\n'
+    elif N_hanging == 1:
+        # e.g., '\n012\n.3.\n'
+        for i in range(N_axes):
+            if i % N_cols == 0 and int(i / N_cols) < N_rows-1:
+                axstr += f'\n{i}'
+            elif i % N_cols == 0 and  int(i / N_cols) == N_rows-1:
+                axstr += f'\n.{i}.\n'
+            else:
+                axstr += f'{i}'
+    elif N_hanging == 2:
+        # e.g., '\n001122\n.3344.\n'
+        for i in range(N_axes):
+            if i % N_cols == 0 and int(i / N_cols) < N_rows-1:
+                axstr += f'\n{i}{i}'
+            elif i % N_cols == 0 and  int(i / N_cols) == N_rows-1:
+                axstr += f'\n.{i}{i}{i+1}{i+1}.\n'
+                break
+            else:
+                axstr += f'{i}{i}'
+
+    if return_axstr:
+        return axstr
+
+    axd = fig.subplot_mosaic(
+        axstr
+    )
+
+    return fig, axd
