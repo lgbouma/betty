@@ -30,6 +30,8 @@ from betty.paths import TESTDATADIR
 from astrobase.services.identifiers import simbad_to_tic
 from astrobase.services.tesslightcurves import get_two_minute_spoc_lightcurves
 
+import exoplanet as xo
+
 # sensible default keys to use for light curve retrieval
 LCKEYDICT = {
     'spoc': {'time': 'TIME',
@@ -151,22 +153,23 @@ def get_model_transit(paramd, time_eval, t_exp=2/(60*24)):
     """
     you know the paramters, and just want to evaluate the median lightcurve.
     """
-    import exoplanet as xo
-
     period = paramd['period']
     t0 = paramd['t0']
+
+    r_star = paramd['r_star']
+    logg_star = paramd['logg_star']
+
     try:
-        r = paramd['ror']
+        ror = paramd['ror']
+        r_pl = ror * r_star
     except KeyError:
-        r = np.exp(paramd['log_ror'])
+        log_ror = np.exp(paramd['log_ror'])
+        r_pl = np.exp(log_ror) * r_star
 
     b = paramd['b']
     ukey = 'u' if 'u[0]' in paramd.keys() else 'u_star'
     u0 = paramd[f'{ukey}[0]']
     u1 = paramd[f'{ukey}[1]']
-
-    r_star = paramd['r_star']
-    logg_star = paramd['logg_star']
 
     try:
         mean = paramd['mean']
@@ -188,10 +191,79 @@ def get_model_transit(paramd, time_eval, t_exp=2/(60*24)):
     u = [u0, u1]
 
     mu_transit = xo.LimbDarkLightCurve(u).get_light_curve(
-            orbit=orbit, r=r, t=time_eval, texp=t_exp
+            orbit=orbit, r=r_pl, t=time_eval, texp=t_exp
     ).T.flatten()
 
     return mu_transit.eval() + mean
+
+
+def get_model_transit_quad(paramd, time_eval, _tmid, t_exp=2/(60*24),
+                           includemean=1):
+    """
+    Same as get_model_transit, but for a transit + quadratic trend. The midtime
+    of the trend must be the same as used in betty.modelfitter for the a1 and
+    a2 coefficients to be correctly defined.
+    """
+    period = paramd['period']
+    t0 = paramd['t0']
+    try:
+        r = paramd['ror']
+    except KeyError:
+        r = np.exp(paramd['log_ror'])
+
+    b = paramd['b']
+    u0 = paramd['u[0]']
+    u1 = paramd['u[1]']
+
+    r_star = paramd['r_star']
+    logg_star = paramd['logg_star']
+
+    try:
+        mean = paramd['mean']
+    except KeyError:
+        mean_key = [k for k in list(paramd.keys()) if 'mean' in k]
+        assert len(mean_key) == 1
+        mean_key = mean_key[0]
+        mean = paramd[mean_key]
+
+    a1 = paramd[ [k for k in list(paramd.keys()) if '_a1' in k][0] ]
+    a2 = paramd[ [k for k in list(paramd.keys()) if '_a2' in k][0] ]
+
+    # factor * 10**logg / r_star = rho
+    factor = 5.141596357654149e-05
+
+    rho_star = factor*10**logg_star / r_star
+
+    orbit = xo.orbits.KeplerianOrbit(
+        period=period, t0=t0, b=b, rho_star=rho_star
+    )
+
+    u = [u0, u1]
+
+    mu_transit = xo.LimbDarkLightCurve(u).get_light_curve(
+            orbit=orbit, r=r_pl, t=time_eval, texp=t_exp
+    ).T.flatten()
+
+    mu_model = (
+        mean +
+        a1*(time_eval-_tmid) +
+        a2*(time_eval-_tmid)**2 +
+        mu_transit.eval()
+    )
+
+    if includemean:
+        mu_trend = (
+            mean +
+            a1*(time_eval-_tmid) +
+            a2*(time_eval-_tmid)**2
+        )
+    else:
+        mu_trend = (
+            a1*(time_eval-_tmid) +
+            a2*(time_eval-_tmid)**2
+        )
+
+    return mu_model, mu_trend
 
 
 def _get_fitted_data_dict_simpletransit(m, summdf):
