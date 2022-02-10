@@ -1,6 +1,7 @@
 """
 Post-fit plots:
     plot_fitindiv
+    plot_fitindivpanels
     plot_phasefold
     plot_cornerplot
     plot_1d_posterior
@@ -168,6 +169,92 @@ def plot_fitindiv(m, summdf, outpath, overwrite=1, modelid=None,
     savefig(fig, outpath, writepdf=0, dpi=300)
 
 
+def plot_fitindivpanels(m, summdf, outpath, overwrite=1, modelid=None,
+                        singleinstrument='tess'):
+    """
+    Plot of flux timeseries, with individual transit windows and fits
+    underneath.
+    """
+
+    set_style()
+
+    if modelid not in ['localpolytransit']:
+        raise NotImplementedError
+
+    if os.path.exists(outpath) and not overwrite:
+        LOGINFO(f'found {outpath} and no overwrite')
+        return
+
+    if modelid == 'localpolytransit':
+        d = _get_fitted_data_dict_localpolytransit(
+            m, summdf, bestfitmeans='map'
+        )
+        _d = d[singleinstrument]
+
+    t_dur = np.nanmedian(m.trace.posterior.T_14)
+
+    t0 = summdf.loc['t0', 'median']
+    per = summdf.loc['period', 'median']
+    epochs = np.arange(-1000, 1000, 1)
+    tra_times = t0 + per*epochs
+
+    # 2 extra keys are "tess" (singleinstrument key) and "all".
+    N_transit_windows = len(d.keys()) - 2
+
+    N_axes = N_transit_windows
+
+    fig, axd = given_N_axes_get_3col_mosaic_subplots(N_axes)
+
+    for ix in range(N_axes):
+
+        ax = axd[str(ix)]
+
+        # _d contains the following keys:
+        # ['x_obs', 'y_err', 'x_mod', 'y_mod', 'y_obs', 'y_resid', 'params']
+        _d = d[f'{singleinstrument}_{ix}']
+
+        # plot data
+        #ax.scatter(_d['x_obs'], _d['y_obs'], c='k', zorder=3, s=0.5, rasterized=True,
+        #           linewidths=0)
+
+        x0 = 2457000
+        y0 = np.nanmedian(_d['y_obs'])
+
+        ax.errorbar(_d['x_obs']-x0, 1e3*(_d['y_obs']-y0), yerr=1e3*_d['y_err'], fmt='none',
+                    ecolor='k', elinewidth=0.5, capsize=2, mew=0.5, zorder=2)
+
+        ax.plot(_d['x_mod']-x0, 1e3*(_d['y_mod']-y0), color='darkgray', alpha=1,
+                rasterized=False, lw=0.7, zorder=1)
+
+        # midpoint of model is a decent mid-transit time guess
+        t_mid = np.nanmedian(_d['x_mod']-x0)
+
+        N_tdur = 4
+        xmin, xmax = t_mid-N_tdur*t_dur/24, t_mid+N_tdur*t_dur/24
+        ax.set_xlim((xmin, xmax))
+
+        # set ylim and transit time line
+        ymin, ymax = ax.get_ylim()
+        sel = (tra_times-x0 > xmin) & (tra_times-x0 < xmax)
+        ax.vlines(
+            tra_times[sel]-x0, ymin, ymax, colors='darkgray', alpha=0.5,
+            linestyles='--', zorder=-2, linewidths=0.2
+        )
+        ax.set_ylim((ymin, ymax))
+
+        # get x axis to be :.1f
+        ax.xaxis.set_major_formatter(FormatStrFormatter('%.1f'))
+        ax.tick_params(axis='both', labelsize='small')
+
+    fig.text(-0.01,0.5, 'Relative flux [ppt]', va='center', rotation=90,
+             fontsize='large')
+    fig.text(0.5,-0.01, 'Time [BTJD]', va='center', ha='center',
+             fontsize='large')
+
+    fig.tight_layout(h_pad=0.5, w_pad=0.2)
+    savefig(fig, outpath, writepdf=1, dpi=300)
+
+
 def plot_phasefold(m, summdf, outpath, overwrite=0, modelid=None, inppt=0,
                    showerror=1, xlim=None, ylim=None, binsize_minutes=10,
                    savepdf=0, singleinstrument='tess'):
@@ -186,39 +273,34 @@ def plot_phasefold(m, summdf, outpath, overwrite=0, modelid=None, inppt=0,
             m, summdf
         )
         _d = d
-
     elif modelid == 'localpolytransit':
         d = _get_fitted_data_dict_localpolytransit(
             m, summdf, bestfitmeans='map'
         )
         _d = d[singleinstrument]
-
-    elif 'alltransit' in modelid:
-        raise NotImplementedError
-        d = _get_fitted_data_dict_alltransit(m, summdf)
-        _d = d['all']  # (could be "tess" too)
-
-    elif modelid in ['allindivtransit', 'tessindivtransit']:
-        raise NotImplementedError
-        d = _get_fitted_data_dict_allindivtransit(m, summdf)
-        _d = d['tess']
-
     else:
         raise NotImplementedError
 
     P_orb = summdf.loc['period', 'median']
     t0_orb = summdf.loc['t0', 'median']
 
+    if modelid == 'simpletransit':
+        ymodkey = 'y_mod'
+        yobskey = 'y_obs'
+    elif modelid == 'localpolytransit':
+        ymodkey = 'y_mod_notrend'
+        yobskey = 'y_obs_notrend'
+
     # phase and bin them.
     binsize_phase = (binsize_minutes / (60*24))/P_orb # prev: 5e-4
     orb_d = phase_magseries(
-        _d['x_obs'], _d['y_obs'], P_orb, t0_orb, wrap=True, sort=True
+        _d['x_obs'], _d[yobskey], P_orb, t0_orb, wrap=True, sort=True
     )
     orb_bd = phase_bin_magseries(
         orb_d['phase'], orb_d['mags'], binsize=binsize_phase, minbinelems=3
     )
     mod_d = phase_magseries(
-        _d['x_mod'], _d['y_mod'], P_orb, t0_orb, wrap=True, sort=True
+        _d['x_mod'], _d[ymodkey], P_orb, t0_orb, wrap=True, sort=True
     )
     resid_d = phase_magseries(
         _d['x_obs'], _d['y_resid'], P_orb, t0_orb, wrap=True, sort=True
@@ -334,6 +416,7 @@ def plot_cornerplot(var_names, m, outpath, overwrite=1):
     plt.close('all')
 
     from corner import __version__
+    import arviz as az
 
     if float(__version__[:3]) < 2.2:
 

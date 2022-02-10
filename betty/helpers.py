@@ -341,20 +341,18 @@ def _get_fitted_data_dict_localpolytransit(
 
         d[name] = {}
         d[name]['x_obs'] = m.data[name][0]
-        # d[name]['y_obs'] = m.data[name][1]
+        d[name]['y_obs'] = m.data[name][1]
         d[name]['y_err'] = m.data[name][2]
 
         params = ['period', 't0', 'log_ror', 'b', 'u_star[0]', 'u_star[1]',
                   'r_star', 'logg_star', f'{name}_mean', f'{name}_a1',
-                 f'{name}_a2']
+                  f'{name}_a2']
 
         _tmid = np.nanmedian(m.data[name][0])
         t_exp = np.nanmedian(np.diff(m.data[name][0]))
 
         if bestfitmeans == 'mode':
-            paramd = {}
-            for k in params:
-                paramd[k] = _estimate_mode(m.trace[k])
+            paramd = {k: _estimate_mode(m.trace[k]) for k in params}
         elif bestfitmeans == 'median':
             paramd = {k : summdf.loc[k, 'median'] for k in params}
         elif bestfitmeans == 'mean':
@@ -388,12 +386,13 @@ def _get_fitted_data_dict_localpolytransit(
         d[name]['x_mod'] = x_mod
 
         # this is used for phase-folded data, with the local trend removed.
-        d[name]['y_mod'] = y_mod_median - y_mod_median_trend
+        d[name]['y_mod'] = y_mod_median
+        d[name]['y_mod_notrend'] = y_mod_median - y_mod_median_trend
 
         # NOTE: for this case, the "residual" of the observation minus the
         # quadratic trend is actually the "observation" (containing only the
         # transit, with the rotation signal removed)
-        d[name]['y_obs'] = m.data[name][1] - y_mod_median_trend_at_xobs
+        d[name]['y_obs_notrend'] = m.data[name][1] - y_mod_median_trend_at_xobs
 
         # the "full residual" is of the observation minus the quadratic trend
         # minus the transit model minus the transit
@@ -408,7 +407,8 @@ def _get_fitted_data_dict_localpolytransit(
     n_singleinstrument = len([k for k in d.keys() if singleinstrument in k])
     d[singleinstrument] = {}
     d['all'] = {}
-    _p = ['x_obs', 'y_obs', 'y_err', 'y_resid', 'y_mod', 'x_mod']
+    _p = ['x_obs', 'y_obs', 'y_err', 'y_resid', 'y_mod', 'x_mod',
+          'y_obs_notrend', 'y_mod_notrend']
     for p in _p:
         d[singleinstrument][p] = np.hstack(
             [d[f'{singleinstrument}_{ix}'][p] for ix in

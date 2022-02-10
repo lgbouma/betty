@@ -25,7 +25,7 @@ from betty.paths import TESTDATADIR, TESTRESULTSDIR, BETTYDIR
 EPHEMDICT = {
     'WASP_4': {'t0': 1355.1845, 'per': 1.338231466, 'tdur':2.5/24},
     'HAT-P-14': {'t0': 1984.6530, 'per': 4.62787, 'tdur':2.5/24},
-    'TIC_117689799': {'t0': 2458684.712181, 'per': 2.157913, 'tdur':1/24},
+    'TIC_117689799': {'t0': 2458684.712181, 'per': 2.157913, 'tdur':2/24},
 }
 
 def _quicklcplot(time, flux, flux_err, outpath):
@@ -118,9 +118,6 @@ def test_localpolytransit(starid='TIC_117689799', N_samples=1000):
         outpath = join(PLOTDIR, f'{starid}_{modelid}_fitindivpanels.png')
         bp.plot_fitindivpanels(m, summdf, outpath, modelid=modelid,
                                singleinstrument='tess')
-        #FIXME FIXME FIXME TODO TODO TODO:
-        # TODO : IMPLEMENT "FITINDIVPANELS"
-        assert 0
 
     if posttable:
         outpath = join(PLOTDIR, f'{starid}_{modelid}_trimmed_posteriortable.tex')
@@ -133,8 +130,6 @@ def test_localpolytransit(starid='TIC_117689799', N_samples=1000):
     if cornerplot:
         outpath = join(PLOTDIR, f'{starid}_{modelid}_trimmed_cornerplot.png')
         bp.plot_cornerplot(list(_init_priordict), m, outpath)
-
-
 
 
 if __name__ == "__main__":
