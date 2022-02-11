@@ -14,6 +14,7 @@ MAP plots:
     plot_phased_subsets
 
 Helper functions:
+    map_integer_to_character
     given_N_axes_get_3col_mosaic_subplots
     doublemedian, doublemean, doublepctile, get_ylimguess
 """
@@ -207,7 +208,7 @@ def plot_fitindivpanels(m, summdf, outpath, overwrite=1, modelid=None,
 
     for ix in range(N_axes):
 
-        ax = axd[str(ix)]
+        ax = axd[map_integer_to_character(ix)]
 
         # _d contains the following keys:
         # ['x_obs', 'y_err', 'x_mod', 'y_mod', 'y_obs', 'y_resid', 'params']
@@ -1430,6 +1431,19 @@ def plot_phased_light_curve_samples(
     plt.close('all')
 
 
+def map_integer_to_character(integer):
+    """
+    For an integer between 0 and 1000, get a unique unicode character from it.
+    """
+
+    assert isinstance(integer, int)
+    assert integer >= 0 and integer <= 1000
+
+    offset = 161
+
+    return chr(integer + offset)
+
+
 def given_N_axes_get_3col_mosaic_subplots(N_axes, return_axstr=0):
     """
     Given the number of axes required, generate a figure and axd subplot
@@ -1450,30 +1464,34 @@ def given_N_axes_get_3col_mosaic_subplots(N_axes, return_axstr=0):
     if N_hanging == 0:
         # e.g., '\n012\n345\n'
         for i in range(N_axes):
+            c = map_integer_to_character(i)
             if i % N_cols == 0:
-                axstr += f'\n{i}'
+                axstr += f'\n{c}'
             else:
-                axstr += f'{i}'
+                axstr += f'{c}'
         axstr += '\n'
     elif N_hanging == 1:
         # e.g., '\n012\n.3.\n'
         for i in range(N_axes):
+            c = map_integer_to_character(i)
             if i % N_cols == 0 and int(i / N_cols) < N_rows-1:
-                axstr += f'\n{i}'
+                axstr += f'\n{c}'
             elif i % N_cols == 0 and  int(i / N_cols) == N_rows-1:
-                axstr += f'\n.{i}.\n'
+                axstr += f'\n.{c}.\n'
             else:
-                axstr += f'{i}'
+                axstr += f'{c}'
     elif N_hanging == 2:
         # e.g., '\n001122\n.3344.\n'
         for i in range(N_axes):
+            c = map_integer_to_character(i)
+            cp1 = map_integer_to_character(i+1)
             if i % N_cols == 0 and int(i / N_cols) < N_rows-1:
-                axstr += f'\n{i}{i}'
+                axstr += f'\n{c}{c}'
             elif i % N_cols == 0 and  int(i / N_cols) == N_rows-1:
-                axstr += f'\n.{i}{i}{i+1}{i+1}.\n'
+                axstr += f'\n.{c}{c}{cp1}{cp1}.\n'
                 break
             else:
-                axstr += f'{i}{i}'
+                axstr += f'{c}{c}'
 
     if return_axstr:
         return axstr

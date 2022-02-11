@@ -4,23 +4,31 @@ def test_3col_mosaic():
 
     assert (
         given_N_axes_get_3col_mosaic_subplots(6, return_axstr=1)
-        == '\n012\n345\n'
+        == '\n¡¢£\n¤¥¦\n'
     )
 
     assert (
         given_N_axes_get_3col_mosaic_subplots(4, return_axstr=1)
-        == '\n012\n.3.\n'
+        == '\n¡¢£\n.¤.\n'
     )
 
     assert (
         given_N_axes_get_3col_mosaic_subplots(5, return_axstr=1)
-        == '\n001122\n.3344.\n'
+        == '\n¡¡¢¢££\n.¤¤¥¥.\n'
     )
 
     assert (
         given_N_axes_get_3col_mosaic_subplots(8, return_axstr=1)
-        == '\n001122\n334455\n.6677.\n'
+        == '\n¡¡¢¢££\n¤¤¥¥¦¦\n.§§¨¨.\n'
     )
+
+    # this is the test case that drove the choice of weird unicode characters.
+    # instead of say, string versions of numbers.
+    assert (
+        given_N_axes_get_3col_mosaic_subplots(11, return_axstr=1)
+        == '\n¡¡¢¢££\n¤¤¥¥¦¦\n§§¨¨©©\n.ªª««.\n'
+    )
+
 
 if __name__ == "__main__":
     test_3col_mosaic()
