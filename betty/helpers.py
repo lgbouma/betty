@@ -178,7 +178,7 @@ def retrieve_tess_lcdata(lcfiles, provenance=None, merge_sectors=1,
     return outd
 
 
-def get_model_transit(paramd, time_eval, t_exp=2/(60*24)):
+def get_model_transit(paramd, time_eval, t_exp=2/(60*24), include_mean=True):
     """
     you know the paramters, and just want to evaluate the median lightcurve.
     """
@@ -223,7 +223,10 @@ def get_model_transit(paramd, time_eval, t_exp=2/(60*24)):
             orbit=orbit, r=r_pl, t=time_eval, texp=t_exp
     ).T.flatten()
 
-    return mu_transit.eval() + mean
+    if include_mean:
+        return mu_transit.eval() + mean
+    else:
+        return mu_transit.eval()
 
 
 def get_model_transit_quad(paramd, time_eval, _tmid, t_exp=2/(60*24),
@@ -543,7 +546,7 @@ def _get_fitted_data_dict_allindivtransit(m, summdf, bestfitmeans='median'):
 
 
 def _subset_cut(x_obs, y_obs, y_err, n=12, t0=None, per=None, tdur=None,
-                onlyodd=False, onlyeven=False):
+                onlyodd=False, onlyeven=False, verbose=True):
     """
     Slice a time/flux/flux_err timeseries centered on transit windows, such
     that:
@@ -579,10 +582,11 @@ def _subset_cut(x_obs, y_obs, y_err, n=12, t0=None, per=None, tdur=None,
         s = (x_obs > start_time) & (x_obs < end_time)
         sel |= s
 
-    LOGINFO(42*'#')
-    LOGINFO(f'Before subset cut: {len(x_obs)} observations.')
-    LOGINFO(f'After subset cut: {len(x_obs[sel])} observations.')
-    LOGINFO(42*'#')
+    if verbose:
+        LOGINFO(42*'#')
+        LOGINFO(f'Before subset cut: {len(x_obs)} observations.')
+        LOGINFO(f'After subset cut: {len(x_obs[sel])} observations.')
+        LOGINFO(42*'#')
 
     x_obs = x_obs[sel]
     y_obs = y_obs[sel]
