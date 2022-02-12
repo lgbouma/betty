@@ -1,8 +1,10 @@
 """
-Post-fit plots:
+Posterior plots:
     plot_fitindiv
     plot_fitindivpanels
+    plot_localpolyindivpanels
     plot_phasefold
+    plot_phased_light_curve_gptransit
     plot_cornerplot
     plot_1d_posterior
     plot_grounddepth
@@ -10,7 +12,6 @@ Post-fit plots:
 MAP plots:
     plot_light_curve
     plot_multicolorlight_curve
-    plot_phased_light_curve_gptransit
     plot_phased_subsets
 
 Helper functions:
@@ -254,6 +255,97 @@ def plot_fitindivpanels(m, summdf, outpath, overwrite=1, modelid=None,
 
     fig.tight_layout(h_pad=0.5, w_pad=0.2)
     savefig(fig, outpath, writepdf=1, dpi=300)
+
+
+def plot_localpolyindivpanels(d, m, summdf, outpath, overwrite=1, modelid=None,
+                              singleinstrument='tess'):
+    """
+    You have fitted a "simpletransit" model to a light curve, after first
+    removing local trends with a Nth order polynomial.  Was this OK to do?
+    How do the results look, for each window?
+    """
+
+    set_style()
+
+    if modelid not in ['simpletransit']:
+        raise NotImplementedError
+
+    if os.path.exists(outpath) and not overwrite:
+        LOGINFO(f'found {outpath} and no overwrite')
+        return
+
+    if modelid == 'simpletransit':
+        __d, params, paramd = _get_fitted_data_dict_simpletransit(
+            m, summdf
+        )
+        _d = __d
+
+    t_dur = np.nanmedian(m.trace.posterior.T_14)
+    t0 = summdf.loc['t0', 'median']
+    per = summdf.loc['period', 'median']
+    epochs = np.arange(-1000, 1000, 1)
+    tra_times = t0 + per*epochs
+
+    # 2 extra keys are "tess" (singleinstrument key) and "all".
+    N_transit_windows = d['ngroups']
+
+    N_axes = N_transit_windows
+
+    fig, axd = given_N_axes_get_3col_mosaic_subplots(N_axes)
+
+    for ix in range(N_axes):
+
+        ax = axd[map_integer_to_character(ix)]
+
+        # plot data
+        x0 = 2457000
+        y0 = np.nanmedian(d[f'flux_{ix}'])
+
+        ax.errorbar(d[f'time_{ix}']-x0, 1e3*(d[f'flux_{ix}']-y0),
+                    yerr=1e3*d[f'flux_err_{ix}'], fmt='none', ecolor='k',
+                    elinewidth=0.5, capsize=2, mew=0.5, zorder=2)
+
+        # plot model (local chi-squared polynomial, + median transit)
+
+        y_polynomial = d[f'mod_flux_{ix}']
+
+        y_transit = get_model_transit(
+            paramd, d[f'mod_time_{ix}'],
+            t_exp=np.nanmedian(np.diff(d[f'mod_time_{ix}'])), include_mean=0
+        )
+
+        ax.plot(d[f'mod_time_{ix}']-x0, 1e3*(y_polynomial + y_transit - y0),
+                color='darkgray', alpha=1, rasterized=False, lw=0.7, zorder=1)
+
+        # center on midpoint of model  (which might be off-transit, if the
+        # model is too!)
+        t_mid = np.nanmedian(d[f'mod_time_{ix}']-x0)
+
+        N_tdur = 5
+        xmin, xmax = t_mid-N_tdur*t_dur/24, t_mid+N_tdur*t_dur/24
+        ax.set_xlim((xmin, xmax))
+
+        # set ylim and transit time line
+        ymin, ymax = ax.get_ylim()
+        sel = (tra_times-x0 > xmin) & (tra_times-x0 < xmax)
+        ax.vlines(
+            tra_times[sel]-x0, ymin, ymax, colors='darkgray', alpha=0.5,
+            linestyles='--', zorder=-2, linewidths=0.2
+        )
+        ax.set_ylim((ymin, ymax))
+
+        # get x axis to be :.1f
+        ax.xaxis.set_major_formatter(FormatStrFormatter('%.1f'))
+        ax.tick_params(axis='both', labelsize='x-small')
+
+    fig.text(-0.01,0.5, 'Relative flux [ppt]', va='center', rotation=90,
+             fontsize='large')
+    fig.text(0.5,-0.01, 'Time [BTJD]', va='center', ha='center',
+             fontsize='large')
+
+    fig.tight_layout(h_pad=0.5, w_pad=0.2)
+    savefig(fig, outpath, writepdf=1, dpi=300)
+
 
 
 def plot_phasefold(m, summdf, outpath, overwrite=0, modelid=None, inppt=0,
