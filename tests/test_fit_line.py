@@ -75,7 +75,7 @@ def test_fit_line():
     ##################
     # trace plot from PyMC3
     plt.figure(figsize=(7, 7))
-    pm.traceplot(trace[100:])
+    pm.plot_trace(trace[100:])
     plt.tight_layout()
     path1 = join(TESTRESULTSDIR, 'test_fit_line_traceplot.png')
     plt.savefig(path1)
