@@ -6,38 +6,24 @@ In this test, the TESS WASP-4 data are fitted simultaneously for {"period",
 import numpy as np, matplotlib.pyplot as plt, pandas as pd, pymc3 as pm
 import pickle, os, corner, pytest
 from collections import OrderedDict
-from pymc3.backends.tracetab import trace_to_dataframe
-import exoplanet as xo
 
 from os.path import join
 from importlib.machinery import SourceFileLoader
-
-try:
-    import betty.plotting as bp
-except ModuleNotFoundError as e:
-    print(f'WRN! {e}')
-    pass
 
 from betty.helpers import (
     get_wasp4_lightcurve, _subset_cut, retrieve_tess_lcdata
 )
 from betty.posterior_table import make_posterior_table
 from betty.modelfitter import ModelFitter
-
 from betty.paths import TESTDATADIR, TESTRESULTSDIR, BETTYDIR
 
-from astrobase.services.identifiers import (
-    simbad_to_tic
-)
-from astrobase.services.tesslightcurves import (
-    get_two_minute_spoc_lightcurves
-)
+from astrobase.services.identifiers import simbad_to_tic
+from astrobase.services.tesslightcurves import get_two_minute_spoc_lightcurves
 
 EPHEMDICT = {
     'WASP_4': {'t0': 1355.1845, 'per': 1.338231466, 'tdur':2.5/24},
     'HAT-P-14': {'t0': 1984.6530, 'per': 4.62787, 'tdur':2.5/24}
 }
-
 
 @pytest.mark.skip(reason="PyMC3 sampling too cray for Github Actions.")
 def test_simpletransit(starid='WASP_4', N_samples=1000):
@@ -68,9 +54,6 @@ def test_simpletransit(starid='WASP_4', N_samples=1000):
 
     priorpath = join(TESTDATADIR, f'{starid}_{modelid}_priors.py')
     if not os.path.exists(priorpath):
-        # TODO: auto-get star info. follow
-        # tessttvfinder.src.measure_transit_times_from_lightcurve by
-        # querying nasa exoplanet archive.
         raise FileNotFoundError(f'need to create {priorpath}')
     priormod = SourceFileLoader('prior', priorpath).load_module()
     priordict = priormod.priordict
@@ -104,6 +87,8 @@ def test_simpletransit(starid='WASP_4', N_samples=1000):
     posttable = 1
 
     PLOTDIR = TESTRESULTSDIR
+
+    import betty.plotting as bp
 
     if posttable:
         outpath = join(PLOTDIR, f'{starid}_{modelid}_posteriortable.tex')
