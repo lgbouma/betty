@@ -363,7 +363,7 @@ def plot_phasefold(m, summdf, outpath, overwrite=0, modelid=None, inppt=0,
 
     if modelid == 'simpletransit':
         d, params, paramd = _get_fitted_data_dict_simpletransit(
-            m, summdf
+            m, summdf, N_model_times=int(2e4)
         )
         _d = d
     elif modelid == 'localpolytransit':
