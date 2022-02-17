@@ -439,15 +439,38 @@ def table_tex_to_pdf(tex_table_path, pdf_path):
     dst_clspath = join(os.getcwd(), 'aastex63.cls')
     copyfile(src_clspath, dst_clspath)
 
+    import socket
+    if 'phtess' in socket.gethostname():
+        # NOTE: better would be to test whether revtex4-1 is accessible on the
+        # system.  However this is fine for now given that I am the only user!
+        LOGWARNING(
+            f'{socket.gethostname()} has a janky latex installation. ' +
+            'Copying extra revtex4-1 files temporarily...'
+        )
+        fnames = [
+            "aip4-1.rtx", "aps10pt4-1.rtx", "aps11pt4-1.rtx", "aps12pt4-1.rtx",
+            "aps4-1.rtx", "apsrmp4-1.rtx", "ltxdocext.sty", "ltxfront.sty",
+            "ltxgrid.sty", "ltxutil.sty", "revsymb4-1.sty", "revtex4-1.cls"
+        ]
+        for f in fnames:
+            src_path = join(TEXDATADIR, f)
+            dst_path = join(os.getcwd(), f)
+            copyfile(src_path, dst_path)
+
     bash_command = f"pdflatex -output-directory {outdir} {temp_texpath}"
-    LOGINFO(f"Running {bash_command}...")
+    LOGINFO(f"Running {bash_command}")
     proc = subprocess.run(
         bash_command.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
 
+    if 'phtess' in socket.gethostname():
+        for f in fnames:
+            dst_path = join(os.getcwd(), f)
+            os.remove(dst_path)
+
     cwd = os.getcwd()
     bash_command = f"rm {outdir}/*aux {outdir}/*log {outdir}/*out {cwd}/aastex63.cls"
-    LOGINFO(f"Running {bash_command}...")
+    LOGINFO(f"Running {bash_command}")
     proc = subprocess.run(
         bash_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         shell=True
