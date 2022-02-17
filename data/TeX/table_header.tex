@@ -1,0 +1,40 @@
+\documentclass[12pt,modern,twocolumn,tighten]{aastex63}
+\usepackage{amsmath,amstext,amssymb}
+\usepackage[T1]{fontenc}
+\usepackage[figure,figure*]{hypcap}
+\usepackage{graphics,graphicx}
+\usepackage{hyperref}
+\usepackage{natbib}
+\usepackage[caption=false]{subfig} % for subfloat
+\usepackage{enumitem} % for specific spacing of enumerate
+\usepackage{epigraph}
+
+\begin{document}
+\pagenumbering{gobble}
+% Table of best fit parameters
+%\startlongtable
+\begin{deluxetable*}{lllrrrrrrr}
+	%
+	\tablecaption{ Priors and posteriors for transit model with local
+  polynomials removed.}
+	\label{tab:posterior}
+	%
+	\tabletypesize{\scriptsize}
+	%\tabletypesize{\small}
+	%
+	%\tablenum{2}
+	%
+	\tablehead{
+		\colhead{Param.} & 
+		\colhead{Unit} &
+		\colhead{Prior} & 
+		\colhead{Median} & 
+		\colhead{Mean} & 
+		\colhead{Std{.} Dev.} &
+		\colhead{3\% HDI} &
+		\colhead{97\% HDI} &
+		\colhead{ESS} &
+		\colhead{$\hat{R}-1$}
+	}
+  %
+	\startdata
