@@ -12,6 +12,7 @@ if not os.path.exists(BETTYDIR):
 
 DATADIR = os.path.join(os.path.dirname(list(__path__)[0]), 'data')
 TESTDATADIR = os.path.join(DATADIR, 'test_data')
+TEXDATADIR = os.path.join(DATADIR, 'TeX')
 RESULTSDIR = os.path.join(os.path.dirname(list(__path__)[0]), 'results')
 TESTRESULTSDIR = os.path.join(RESULTSDIR, 'test_results')
 

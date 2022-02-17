@@ -393,17 +393,70 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
             lines[ix] = thisline
             continue
 
-        ## iteratively replace trailing zeros with whitespace
-        #while re.search("0{2,10}\ ", thisline) is not None:
-        #    r = re.search("0{2,10}\ ", thisline)
-        #    thisline = thisline.replace(
-        #        thisline[r.start():r.end()],
-        #        ' '
-        #    )
-
         lines[ix] = thisline
 
     with open(outpath, 'w') as f:
         f.writelines(lines)
 
-    print(f'made {outpath}')
+    LOGINFO(f'made {outpath}')
+
+
+def table_tex_to_pdf(tex_table_path, pdf_path):
+    """
+    Given the LaTeX file made by make_posterior_table, compile it into a PDF
+    file using pdflatex.
+    """
+    from betty.paths import TEXDATADIR
+
+    headpath = join(TEXDATADIR, 'table_header.tex')
+    tailpath = join(TEXDATADIR, 'table_tail.tex')
+    with open(headpath, 'r') as f:
+        headlines = f.readlines()
+    with open(tailpath, 'r') as f:
+        taillines = f.readlines()
+
+    with open(tex_table_path, 'r') as f:
+        midlines = f.readlines()
+
+    # drop the header
+    midlines = midlines[1:]
+    # fix the citation since the output tex file does not have a bibliography
+    midlines = [m.replace('\citet{exoplanet:kipping13}', 'Kipping 2013')
+                for m in midlines]
+
+    # python's list concatenation works with +
+    outlines = headlines + midlines + taillines
+
+    outdir = os.path.dirname(pdf_path)
+    temp_texpath = join(
+        outdir, 'temp_'+os.path.basename(pdf_path).replace('.pdf','.tex')
+    )
+    with open(temp_texpath, 'w') as f:
+        f.writelines(outlines)
+    LOGINFO(f"Wrote {temp_texpath}")
+
+    src_clspath = join(TEXDATADIR, 'aastex63.cls')
+    dst_clspath = join(os.getcwd(), 'aastex63.cls')
+    copyfile(src_clspath, dst_clspath)
+
+    bash_command = f"pdflatex -output-directory {outdir} {temp_texpath}"
+    LOGINFO(f"Running {bash_command}...")
+    proc = subprocess.run(
+        bash_command.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
+
+    cwd = os.getcwd()
+    bash_command = f"rm {outdir}/*aux {outdir}/*log {outdir}/*out {cwd}/aastex63.cls"
+    LOGINFO(f"Running {bash_command}...")
+    proc = subprocess.run(
+        bash_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        shell=True
+    )
+
+    _pdfpath = join(
+        outdir, 'temp_'+os.path.basename(pdf_path)
+    )
+
+    if os.path.exists(_pdfpath):
+        os.rename(_pdfpath, pdf_path)
+        LOGINFO(f"Made {pdf_path}.")
