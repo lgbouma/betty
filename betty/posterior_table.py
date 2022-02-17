@@ -400,6 +400,9 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
 
     LOGINFO(f'made {outpath}')
 
+    if makepdf:
+        table_tex_to_pdf(outpath, outpath.replace('.tex','.pdf'))
+
 
 def table_tex_to_pdf(tex_table_path, pdf_path):
     """
