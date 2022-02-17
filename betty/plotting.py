@@ -298,7 +298,8 @@ def plot_localpolyindivpanels(d, m, summdf, outpath, overwrite=1, modelid=None,
         ax = axd[map_integer_to_character(ix)]
 
         # plot data
-        x0 = 2457000
+        if ix == 0:
+            x0 = np.nanmin(d[f'time_{ix}'])
         y0 = np.nanmedian(d[f'flux_{ix}'])
 
         ax.errorbar(d[f'time_{ix}']-x0, 1e3*(d[f'flux_{ix}']-y0),
@@ -340,7 +341,7 @@ def plot_localpolyindivpanels(d, m, summdf, outpath, overwrite=1, modelid=None,
 
     fig.text(-0.01,0.5, 'Relative flux [ppt]', va='center', rotation=90,
              fontsize='large')
-    fig.text(0.5,-0.01, 'Time [BTJD]', va='center', ha='center',
+    fig.text(0.5,-0.01, 'Days from start', va='center', ha='center',
              fontsize='large')
 
     fig.tight_layout(h_pad=0.5, w_pad=0.2)
@@ -349,12 +350,12 @@ def plot_localpolyindivpanels(d, m, summdf, outpath, overwrite=1, modelid=None,
 
 
 def plot_phasefold(m, summdf, outpath, overwrite=0, modelid=None, inppt=0,
-                   showerror=1, xlim=None, ylim=None, binsize_minutes=10,
+                   showerror=1, xlimd=None, ylimd=None, binsize_minutes=10,
                    savepdf=0, singleinstrument='tess'):
     """
     Options:
         inppt: Whether to median subtract and give flux in units of 1e-3.
-        xlim: can be tuple. (Units: hours)
+        xlimd: can be tuple. (Units: hours)
         binsize_minutes: bin to this many minutes in phase
         savepdf: whether to also save a pdf vesion
     """
@@ -406,10 +407,19 @@ def plot_phasefold(m, summdf, outpath, overwrite=0, modelid=None, inppt=0,
     # make tha plot
     plt.close('all')
 
-    fig, (a0, a1) = plt.subplots(nrows=2, ncols=1, sharex=True,
-                                 figsize=(4, 3), gridspec_kw=
-                                 {'height_ratios':[3, 2]})
+    fig = plt.figure(figsize=(4,3))
+    axd = fig.subplot_mosaic(
+        """
+        A
+        B
+        """,
+        gridspec_kw={
+            "height_ratios": [3,2]
+        }
+    )
 
+    a0 = axd['A']
+    a1 = axd['B']
     if not inppt:
 
         a0.scatter(orb_d['phase']*P_orb*24, orb_d['mags'], color='gray', s=2,
@@ -456,18 +466,18 @@ def plot_phasefold(m, summdf, outpath, overwrite=0, modelid=None, inppt=0,
     a1.set_ylabel('Residual [ppt]', fontsize='small')
     a1.set_xlabel('Hours from mid-transit', fontsize='small')
 
-    yv = resid_d['mags']
-    if inppt:
-        yv = 1e3*(resid_d['mags'])
-    a1.set_ylim((np.nanmedian(yv)-3.2*np.nanstd(yv),
-                 np.nanmedian(yv)+3.2*np.nanstd(yv) ))
-
-    for a in (a0, a1):
+    for k,a in axd.items():
         a.set_xlim((-5, 5)) # hours
-        if isinstance(xlim, tuple):
-            a.set_xlim(xlim) # hours
-        if isinstance(ylim, tuple):
-            a.set_ylim(ylim)
+        if isinstance(xlimd, dict):
+            a.set_ylim(xlimd[k])
+        if isinstance(ylimd, dict):
+            a.set_ylim(ylimd[k])
+        else:
+            # sensible default guesses
+            _y = 1e3*(orb_d['mags']-ydiff)
+            axd['A'].set_ylim(get_ylimguess(_y))
+            _y = 1e3*(resid_d['mags'])
+            axd['B'].set_ylim(get_ylimguess(_y))
 
     if showerror:
         trans = transforms.blended_transform_factory(
