@@ -429,7 +429,7 @@ def table_tex_to_pdf(tex_table_path, pdf_path):
 
     outdir = os.path.dirname(pdf_path)
     temp_texpath = join(
-        outdir, 'temp_'+os.path.basename(pdf_path).replace('.pdf','.tex')
+        outdir, 'source_'+os.path.basename(pdf_path).replace('.pdf','.tex')
     )
     with open(temp_texpath, 'w') as f:
         f.writelines(outlines)
@@ -454,7 +454,7 @@ def table_tex_to_pdf(tex_table_path, pdf_path):
     )
 
     _pdfpath = join(
-        outdir, 'temp_'+os.path.basename(pdf_path)
+        outdir, 'source_'+os.path.basename(pdf_path)
     )
 
     if os.path.exists(_pdfpath):
