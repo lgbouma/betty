@@ -4,14 +4,45 @@ table that you can publish.
 
 Main driver function:
     make_posterior_table
+    table_tex_to_pdf
 """
+#############
+## LOGGING ##
+#############
+import logging
+from astrobase import log_sub, log_fmt, log_date_fmt
 
-import os, re, pickle
+DEBUG = False
+if DEBUG:
+    level = logging.DEBUG
+else:
+    level = logging.INFO
+LOGGER = logging.getLogger(__name__)
+logging.basicConfig(
+    level=level,
+    style=log_sub,
+    format=log_fmt,
+    datefmt=log_date_fmt,
+)
+
+LOGDEBUG = LOGGER.debug
+LOGINFO = LOGGER.info
+LOGWARNING = LOGGER.warning
+LOGERROR = LOGGER.error
+LOGEXCEPTION = LOGGER.exception
+logging.getLogger("filelock").setLevel(logging.ERROR)
+
+#############
+## IMPORTS ##
+#############
+import os, re, pickle, subprocess
+from os.path import join
 from copy import deepcopy
 import numpy as np, pandas as pd, matplotlib.pyplot as plt, pymc3 as pm
 from betty.helpers import flatten
 from astropy import units as u
 from numpy import array as nparr
+from shutil import copyfile
 
 ##########################################
 # helper functions for string generation
@@ -97,7 +128,7 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
 
     if os.path.exists(summarypath) and not overwrite:
         df = pd.read_csv(summarypath, index_col=0)
-        print(f'Reading {summarypath}')
+        LOGINFO(f'Reading {summarypath}')
 
     else:
         with open(pklpath, 'rb') as f:
@@ -128,7 +159,7 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
         outdf = df[scols]
 
         outdf.to_csv(summarypath, index=True)
-        print(f'Wrote {summarypath}')
+        LOGINFO(f'Wrote {summarypath}')
 
     # determine whether parametrization == 'log_depth_and_b' or 'log_ror_and_b'
     if 'log_ror' in list(outdf.index) and 'b' in list(outdf.index):
@@ -185,7 +216,7 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
 
     df = df[scols]
 
-    print(df)
+    LOGINFO(df)
 
     fndict = {
         'Normal': normal_str,
@@ -320,7 +351,7 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
 
     _outpath = outpath.replace('.tex', '_clean_table.csv')
     df.to_csv(_outpath, float_format='%.7f', na_rep='NaN')
-    print(f'made {_outpath}')
+    LOGINFO(f'made {_outpath}')
 
     #
     # df.to_latex is dumb with float formatting. clean it.
