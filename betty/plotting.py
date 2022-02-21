@@ -258,7 +258,7 @@ def plot_fitindivpanels(m, summdf, outpath, overwrite=1, modelid=None,
 
 
 def plot_localpolyindivpanels(d, m, summdf, outpath, overwrite=1, modelid=None,
-                              singleinstrument='tess'):
+                              singleinstrument='tess', plot_resids=False):
     """
     You have fitted a "simpletransit" model to a light curve, after first
     removing local trends with a Nth order polynomial.  Was this OK to do?
@@ -290,23 +290,30 @@ def plot_localpolyindivpanels(d, m, summdf, outpath, overwrite=1, modelid=None,
     N_transit_windows = d['ngroups']
 
     N_axes = N_transit_windows
+    if plot_resids:
+        N_axes *= 2
 
-    fig, axd = given_N_axes_get_3col_mosaic_subplots(N_axes)
+    ax_height_inches = 3 if not plot_resids else 1.5
+    fig, axd = given_N_axes_get_3col_mosaic_subplots(
+        N_axes, ax_height_inches=ax_height_inches
+    )
 
     for ix in range(N_axes):
 
         ax = axd[map_integer_to_character(ix)]
 
-        # plot data
+        if plot_resids:
+            # 0 -> (0,3), 1 -> (1,4), 2 -> (2,5), 3 -> (6,9), 4 -> (7,10),
+            # 5 -> (8,11).  spot the pattern.
+            data_ix = ix + 3*(ix // 3)
+            resid_ix = data_ix + 3
+            ax = axd[map_integer_to_character(data_ix)]
+            axr = axd[map_integer_to_character(resid_ix)]
+
         if ix == 0:
             x0 = np.nanmin(d[f'time_{ix}'])
+
         y0 = np.nanmedian(d[f'flux_{ix}'])
-
-        ax.errorbar(d[f'time_{ix}']-x0, 1e3*(d[f'flux_{ix}']-y0),
-                    yerr=1e3*d[f'flux_err_{ix}'], fmt='none', ecolor='k',
-                    elinewidth=0.5, capsize=2, mew=0.5, zorder=2)
-
-        # plot model (local chi-squared polynomial, + median transit)
 
         y_polynomial = d[f'mod_flux_{ix}']
 
@@ -315,8 +322,30 @@ def plot_localpolyindivpanels(d, m, summdf, outpath, overwrite=1, modelid=None,
             t_exp=np.nanmedian(np.diff(d[f'mod_time_{ix}'])), include_mean=0
         )
 
-        ax.plot(d[f'mod_time_{ix}']-x0, 1e3*(y_polynomial + y_transit - y0),
+        y_model = y_polynomial + y_transit
+
+        #
+        # plot data
+        #
+
+        ax.errorbar(d[f'time_{ix}']-x0, 1e3*(d[f'flux_{ix}']-y0),
+                    yerr=1e3*d[f'flux_err_{ix}'], fmt='none', ecolor='k',
+                    elinewidth=0.5, capsize=2, mew=0.5, zorder=2)
+        if plot_resids:
+            _y0 = np.nanmedian(d[f'flux_{ix}']-y_model)
+            ax.errorbar(d[f'time_{ix}']-x0, 1e3*(d[f'flux_{ix}']-y_model-_y0),
+                        yerr=1e3*d[f'flux_err_{ix}'], fmt='none', ecolor='k',
+                        elinewidth=0.5, capsize=2, mew=0.5, zorder=2)
+
+        #
+        # plot model (local chi-squared polynomial, + median transit)
+        #
+
+        ax.plot(d[f'mod_time_{ix}']-x0, 1e3*(y_model - y0),
                 color='darkgray', alpha=1, rasterized=False, lw=0.7, zorder=1)
+        if plot_resids:
+            ax.plot(d[f'mod_time_{ix}']-x0, 1e3*(y_model - y_model - _y0),
+                    color='darkgray', alpha=1, rasterized=False, lw=0.7, zorder=1)
 
         # center on midpoint of model  (which might be off-transit, if the
         # model is too!)
@@ -324,20 +353,23 @@ def plot_localpolyindivpanels(d, m, summdf, outpath, overwrite=1, modelid=None,
 
         N_tdur = 5
         xmin, xmax = t_mid-N_tdur*t_dur/24, t_mid+N_tdur*t_dur/24
-        ax.set_xlim((xmin, xmax))
 
-        # set ylim and transit time line
-        ymin, ymax = ax.get_ylim()
-        sel = (tra_times-x0 > xmin) & (tra_times-x0 < xmax)
-        ax.vlines(
-            tra_times[sel]-x0, ymin, ymax, colors='darkgray', alpha=0.5,
-            linestyles='--', zorder=-2, linewidths=0.2
-        )
-        ax.set_ylim((ymin, ymax))
+        axlist = [ax] if not plot_resids else [ax, axr]
 
-        # get x axis to be :.1f
-        ax.xaxis.set_major_formatter(FormatStrFormatter('%.1f'))
-        ax.tick_params(axis='both', labelsize='x-small')
+        for a in axlist:
+            a.set_xlim((xmin, xmax))
+            # set ylim and transit time line
+            ymin, ymax = a.get_ylim()
+            sel = (tra_times-x0 > xmin) & (tra_times-x0 < xmax)
+            a.vlines(
+                tra_times[sel]-x0, ymin, ymax, colors='darkgray', alpha=0.5,
+                linestyles='--', zorder=-2, linewidths=0.2
+            )
+            a.set_ylim((ymin, ymax))
+
+            # get x axis to be :.1f
+            a.xaxis.set_major_formatter(FormatStrFormatter('%.1f'))
+            a.tick_params(axis='both', labelsize='x-small')
 
     fig.text(-0.01,0.5, 'Relative flux [ppt]', va='center', rotation=90,
              fontsize='large')
@@ -1546,7 +1578,8 @@ def map_integer_to_character(integer):
     return chr(integer + offset)
 
 
-def given_N_axes_get_3col_mosaic_subplots(N_axes, return_axstr=0):
+def given_N_axes_get_3col_mosaic_subplots(N_axes, return_axstr=0,
+                                          ax_height_inches=3):
     """
     Given the number of axes required, generate a figure and axd subplot
     instance, with 3 columns, and however many rows are needed.
@@ -1559,7 +1592,7 @@ def given_N_axes_get_3col_mosaic_subplots(N_axes, return_axstr=0):
     N_rows = int(np.ceil(N_axes / N_cols))
     N_hanging = N_axes % N_cols  # hanging = number "floating" in the final row
 
-    fig = plt.figure(figsize=(6,3*N_rows))
+    fig = plt.figure(figsize=(6, ax_height_inches*N_rows))
 
     axstr = ''
 
