@@ -348,7 +348,7 @@ def plot_localpolyindivpanels(d, m, summdf, outpath, overwrite=1, modelid=None,
         ax.plot(d[f'mod_time_{ix}']-x0, 1e3*(y_model - y0),
                 color='darkgray', alpha=1, rasterized=False, lw=0.7, zorder=1)
         if plot_resids:
-            axr.plot(d[f'mod_time_{ix}']-x0, np.zeros_like(d[f'mod_time_{ix}']),
+            axr.plot(d[f'mod_time_{ix}']-x0, 1e3*(y_transit),
                     color='darkgray', alpha=1, rasterized=False, lw=0.7, zorder=1)
 
         # center on midpoint of model  (which might be off-transit, if the
