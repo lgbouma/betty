@@ -292,13 +292,17 @@ def plot_localpolyindivpanels(d, m, summdf, outpath, overwrite=1, modelid=None,
     N_axes = N_transit_windows
     if plot_resids:
         N_axes *= 2
+        # add extra two rows for data and residuals (because dealing with
+        # blanks for this case w/ the residuals is too tricky).
+        if N_transit_windows % 3 > 0:
+            N_axes += 6
 
     ax_height_inches = 3 if not plot_resids else 1.5
     fig, axd = given_N_axes_get_3col_mosaic_subplots(
         N_axes, ax_height_inches=ax_height_inches
     )
 
-    for ix in range(N_axes):
+    for ix in range(N_transit_windows):
 
         ax = axd[map_integer_to_character(ix)]
 
@@ -332,8 +336,8 @@ def plot_localpolyindivpanels(d, m, summdf, outpath, overwrite=1, modelid=None,
                     yerr=1e3*d[f'flux_err_{ix}'], fmt='none', ecolor='k',
                     elinewidth=0.5, capsize=2, mew=0.5, zorder=2)
         if plot_resids:
-            _y0 = np.nanmedian(d[f'flux_{ix}']-y_model)
-            ax.errorbar(d[f'time_{ix}']-x0, 1e3*(d[f'flux_{ix}']-y_model-_y0),
+            _y0 = np.nanmedian(d[f'flat_flux_{ix}'])
+            axr.errorbar(d[f'time_{ix}']-x0, 1e3*(d[f'flat_flux_{ix}']-_y0),
                         yerr=1e3*d[f'flux_err_{ix}'], fmt='none', ecolor='k',
                         elinewidth=0.5, capsize=2, mew=0.5, zorder=2)
 
@@ -344,7 +348,7 @@ def plot_localpolyindivpanels(d, m, summdf, outpath, overwrite=1, modelid=None,
         ax.plot(d[f'mod_time_{ix}']-x0, 1e3*(y_model - y0),
                 color='darkgray', alpha=1, rasterized=False, lw=0.7, zorder=1)
         if plot_resids:
-            ax.plot(d[f'mod_time_{ix}']-x0, 1e3*(y_model - y_model - _y0),
+            axr.plot(d[f'mod_time_{ix}']-x0, np.zeros_like(d[f'mod_time_{ix}']),
                     color='darkgray', alpha=1, rasterized=False, lw=0.7, zorder=1)
 
         # center on midpoint of model  (which might be off-transit, if the
