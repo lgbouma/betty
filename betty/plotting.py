@@ -287,7 +287,7 @@ def plot_localpolyindivpanels(d, m, summdf, outpath, overwrite=1, modelid=None,
     tra_times = t0 + per*epochs
 
     # 2 extra keys are "tess" (singleinstrument key) and "all".
-    N_transit_windows = d['ngroups']
+    N_transit_windows = int(d['ngroups'])
 
     N_axes = N_transit_windows
     if plot_resids:
