@@ -375,6 +375,9 @@ def plot_localpolyindivpanels(d, m, summdf, outpath, overwrite=1, modelid=None,
             a.xaxis.set_major_formatter(FormatStrFormatter('%.1f'))
             a.tick_params(axis='both', labelsize='x-small')
 
+    titlestr = f"x0={x0}, t0={t0:.7f}, P={per:.7f}"
+    fig.text(0.5, 1.01, titlestr, va='center', ha='center', fontsize='small')
+
     fig.text(-0.01,0.5, 'Relative flux [ppt]', va='center', rotation=90,
              fontsize='large')
     fig.text(0.5,-0.01, 'Days from start', va='center', ha='center',
@@ -534,6 +537,137 @@ def plot_phasefold(m, summdf, outpath, overwrite=0, modelid=None, inppt=0,
                 0.85, _y, yerr=errorfactor*_e,
                 fmt='none', ecolor='black', alpha=1, elinewidth=1, capsize=2,
                 transform=trans
+            )
+
+            LOGINFO(f'Median error [ppt]: {_e:.2f}, errorfactor: {errorfactor*_e:.2f}')
+
+        else:
+            raise NotImplementedError
+
+    fig.tight_layout()
+
+    savefig(fig, outpath, writepdf=savepdf, dpi=300)
+
+
+def plot_singlepanelphasefold(m, summdf, outpath, txt=None, dyfactor=4, overwrite=0,
+                              modelid=None, inppt=0, showerror=1, xlims=None,
+                              ylims=None, binsize_minutes=10, savepdf=1,
+                              singleinstrument='tess'):
+    """
+    Options:
+        inppt: Whether to median subtract and give flux in units of 1e-3.
+        xlimd: can be tuple. (Units: hours)
+        binsize_minutes: bin to this many minutes in phase
+        savepdf: whether to also save a pdf vesion
+    """
+
+    set_style()
+
+    if modelid == 'simpletransit':
+        d, params, paramd = _get_fitted_data_dict_simpletransit(
+            m, summdf, N_model_times=int(2e4)
+        )
+        _d = d
+    elif modelid == 'localpolytransit':
+        d = _get_fitted_data_dict_localpolytransit(
+            m, summdf, bestfitmeans='map'
+        )
+        _d = d[singleinstrument]
+    else:
+        raise NotImplementedError
+
+    P_orb = summdf.loc['period', 'median']
+    t0_orb = summdf.loc['t0', 'median']
+
+    if modelid == 'simpletransit':
+        ymodkey = 'y_mod'
+        yobskey = 'y_obs'
+    elif modelid == 'localpolytransit':
+        ymodkey = 'y_mod_notrend'
+        yobskey = 'y_obs_notrend'
+
+    # phase and bin them.
+    binsize_phase = (binsize_minutes / (60*24))/P_orb # prev: 5e-4
+    orb_d = phase_magseries(
+        _d['x_obs'], _d[yobskey], P_orb, t0_orb, wrap=True, sort=True
+    )
+    orb_bd = phase_bin_magseries(
+        orb_d['phase'], orb_d['mags'], binsize=binsize_phase, minbinelems=3
+    )
+    mod_d = phase_magseries(
+        _d['x_mod'], _d[ymodkey], P_orb, t0_orb, wrap=True, sort=True
+    )
+    resid_d = phase_magseries(
+        _d['x_obs'], _d['y_resid'], P_orb, t0_orb, wrap=True, sort=True
+    )
+    resid_bd = phase_bin_magseries(
+        resid_d['phase'], resid_d['mags'], binsize=binsize_phase,
+        minbinelems=3
+    )
+
+    # make tha plot
+    plt.close('all')
+
+    fig, a0 = plt.subplots(figsize=(4,3))
+
+    assert inppt
+
+    ydiff = 1 if modelid == 'simpletransit' else 0
+
+    a0.scatter(orb_d['phase']*P_orb*24, 1e3*(orb_d['mags']-ydiff),
+               color='darkgray', s=7, alpha=0.6, zorder=3, linewidths=0,
+               rasterized=True, marker='.')
+    a0.scatter(orb_bd['binnedphases']*P_orb*24,
+               1e3*(orb_bd['binnedmags']-ydiff), color='black', s=18, alpha=1,
+               zorder=5, linewidths=0)
+    a0.plot(mod_d['phase']*P_orb*24, 1e3*(mod_d['mags']-ydiff),
+            color='gray', alpha=0.8, rasterized=False, lw=1, zorder=4)
+
+    dy = dyfactor*np.nanmin(1e3*(mod_d['mags']-ydiff))
+
+    a0.scatter(resid_d['phase']*P_orb*24, 1e3*(resid_d['mags'])+dy,
+               color='darkgray', s=7, alpha=0.6, zorder=3, linewidths=0,
+               rasterized=True, marker='.')
+    a0.scatter(resid_bd['binnedphases']*P_orb*24,
+               1e3*resid_bd['binnedmags']+dy, color='black', s=18, alpha=1,
+               zorder=5, linewidths=0)
+    a0.plot(mod_d['phase']*P_orb*24, 1e3*(mod_d['mags']-mod_d['mags'])+dy,
+            color='gray', alpha=0.8, rasterized=False, lw=1, zorder=4)
+
+    a0.set_ylabel('Relative flux [ppt]', fontsize='small')
+    a0.set_xlabel('Hours from mid-transit', fontsize='small')
+
+    a0.set_xlim((-5, 5)) # hours
+    if isinstance(xlims, list):
+        a0.set_ylim(xlims)
+    if isinstance(ylims, list):
+        a0.set_ylim(ylims)
+
+    if isinstance(txt, str):
+        props = dict(boxstyle='square', facecolor='white', alpha=0.95, pad=0.15,
+                     linewidth=0)
+        a0.text(0.98, 0.04, txt, transform=a0.transAxes, ha='right',va='bottom',
+                color='k', zorder=43, fontsize='small', bbox=props)
+
+    if showerror:
+        trans = transforms.blended_transform_factory(
+                a0.transAxes, a0.transData)
+        if inppt:
+            _e = 1e3*np.median(_d['y_err'])
+
+            sampletime = np.nanmedian(np.diff(_d['x_obs']))*24*60 # minutes
+            if binsize_minutes > sampletime:
+                errorfactor = (sampletime/binsize_minutes)**(1/2)
+            else:
+                errorfactor = (binsize_minutes/sampletime)**(1/2)
+
+            ydiff = np.abs(a0.get_ylim()[1] - a0.get_ylim()[0])
+            _y = a0.get_ylim()[0] + 0.6*ydiff
+
+            a0.errorbar(
+                0.85, _y, yerr=errorfactor*_e,
+                fmt='none', ecolor='black', alpha=1, elinewidth=1, capsize=2,
+                transform=trans, zorder=10000
             )
 
             LOGINFO(f'Median error [ppt]: {_e:.2f}, errorfactor: {errorfactor*_e:.2f}')
