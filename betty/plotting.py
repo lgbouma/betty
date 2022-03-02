@@ -3,13 +3,15 @@ Posterior plots:
     plot_fitindiv
     plot_fitindivpanels
     plot_localpolyindivpanels
+
     plot_phasefold
     plot_phased_light_curve_gptransit
+    plot_singlepanelphasefold
+
     plot_cornerplot
     plot_1d_posterior
     plot_grounddepth
 
-MAP plots:
     plot_light_curve
     plot_multicolorlight_curve
     plot_phased_subsets
@@ -554,6 +556,11 @@ def plot_singlepanelphasefold(m, summdf, outpath, txt=None, dyfactor=4, overwrit
                               ylims=None, binsize_minutes=10, savepdf=1,
                               singleinstrument='tess'):
     """
+    Standard phased light curve and residual, xlims focused on the transit.
+    However rather than giving the residual its own axis, we keep it in a
+    single subplot in order to game the "number of sub-panels" system that
+    leads to extra page charges.
+
     Options:
         inppt: Whether to median subtract and give flux in units of 1e-3.
         xlimd: can be tuple. (Units: hours)
@@ -608,7 +615,7 @@ def plot_singlepanelphasefold(m, summdf, outpath, txt=None, dyfactor=4, overwrit
     # make tha plot
     plt.close('all')
 
-    fig, a0 = plt.subplots(figsize=(4,3))
+    fig, a0 = plt.subplots(figsize=(2.7,3))
 
     assert inppt
 
@@ -637,11 +644,14 @@ def plot_singlepanelphasefold(m, summdf, outpath, txt=None, dyfactor=4, overwrit
     a0.set_ylabel('Relative flux [ppt]', fontsize='small')
     a0.set_xlabel('Hours from mid-transit', fontsize='small')
 
-    a0.set_xlim((-5, 5)) # hours
+    a0.set_xlim((-4.9, 4.9)) # hours
     if isinstance(xlims, list):
         a0.set_ylim(xlims)
     if isinstance(ylims, list):
         a0.set_ylim(ylims)
+
+    a0.xaxis.set_tick_params(labelsize='small')
+    a0.yaxis.set_tick_params(labelsize='small')
 
     if isinstance(txt, str):
         props = dict(boxstyle='square', facecolor='white', alpha=0.95, pad=0.15,
