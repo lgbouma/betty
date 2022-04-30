@@ -232,7 +232,7 @@ def make_posterior_table(pklpath, priordict, outpath, modelid, makepdf=1,
     # fmtstring, precision, unit, latexrepr
     PARAMFMTDICT = {
         'period':('({:.5f}; {:.5f})', 7, 'd', r"$P$"),
-        't0':('({:.5f}; {:.5f})', 7, 'd', r"$t_0^{(1)}$"),
+        't0':('({:.5f}; {:.5f})', 4, 'd', r"$t_0^{(1)}$"),
         'log_r':('({:.3f}; {:.3f})', 3, '--', r"$\log R_{\rm p}/R_\star$"),
         'log_ror':('({:.3f}; {:.3f})', 3, '--', r"$\log R_{\rm p}/R_\star$"),
         'log_depth':('({:.4f}; {:.4f})', 3, '--', r"$\log \delta$"),
