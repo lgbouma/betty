@@ -200,7 +200,7 @@ class ModelFitter(ModelParser):
         """
         Fit transit data for an Agol+19 transit. (Ignores any stellar
         variability).  Free parameters are {"period", "t0", "log_ror", "b",
-        "u0", "u1", "log_jitter"}.
+        "u0", "u1", "log_jitter", "logg_star", "r_star"}.
         """
 
         p = self.priordict
