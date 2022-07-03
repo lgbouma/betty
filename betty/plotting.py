@@ -554,7 +554,8 @@ def plot_phasefold(m, summdf, outpath, overwrite=0, modelid=None, inppt=0,
 def plot_singlepanelphasefold(m, summdf, outpath, txt=None, dyfactor=4, overwrite=0,
                               modelid=None, inppt=0, showerror=1, xlims=None,
                               ylims=None, binsize_minutes=10, savepdf=1,
-                              singleinstrument='tess'):
+                              singleinstrument='tess', darkcolors=0,
+                              showresid=1):
     """
     Standard phased light curve and residual, xlims focused on the transit.
     However rather than giving the residual its own axis, we keep it in a
@@ -562,6 +563,8 @@ def plot_singlepanelphasefold(m, summdf, outpath, txt=None, dyfactor=4, overwrit
     leads to extra page charges.
 
     Options:
+        darkcolors: whether to do a white-on-black color scheme.
+        showresid: whether to show the data-model underplot
         inppt: Whether to median subtract and give flux in units of 1e-3.
         xlimd: can be tuple. (Units: hours)
         binsize_minutes: bin to this many minutes in phase
@@ -624,22 +627,25 @@ def plot_singlepanelphasefold(m, summdf, outpath, txt=None, dyfactor=4, overwrit
     a0.scatter(orb_d['phase']*P_orb*24, 1e3*(orb_d['mags']-ydiff),
                color='darkgray', s=7, alpha=0.6, zorder=3, linewidths=0,
                rasterized=True, marker='.')
+    bincolor = 'black' if not darkcolors else 'white'
     a0.scatter(orb_bd['binnedphases']*P_orb*24,
-               1e3*(orb_bd['binnedmags']-ydiff), color='black', s=18, alpha=1,
+               1e3*(orb_bd['binnedmags']-ydiff), color=bincolor, s=18, alpha=1,
                zorder=5, linewidths=0)
+    modelcolor = 'gray' if not darkcolors else 'lightgray'
     a0.plot(mod_d['phase']*P_orb*24, 1e3*(mod_d['mags']-ydiff),
-            color='gray', alpha=0.8, rasterized=False, lw=1, zorder=4)
+            color=modelcolor, alpha=0.8, rasterized=False, lw=1, zorder=4)
 
-    dy = dyfactor*np.nanmin(1e3*(mod_d['mags']-ydiff))
+    if showresid:
+        dy = dyfactor*np.nanmin(1e3*(mod_d['mags']-ydiff))
 
-    a0.scatter(resid_d['phase']*P_orb*24, 1e3*(resid_d['mags'])+dy,
-               color='darkgray', s=7, alpha=0.6, zorder=3, linewidths=0,
-               rasterized=True, marker='.')
-    a0.scatter(resid_bd['binnedphases']*P_orb*24,
-               1e3*resid_bd['binnedmags']+dy, color='black', s=18, alpha=1,
-               zorder=5, linewidths=0)
-    a0.plot(mod_d['phase']*P_orb*24, 1e3*(mod_d['mags']-mod_d['mags'])+dy,
-            color='gray', alpha=0.8, rasterized=False, lw=1, zorder=4)
+        a0.scatter(resid_d['phase']*P_orb*24, 1e3*(resid_d['mags'])+dy,
+                   color='darkgray', s=7, alpha=0.6, zorder=3, linewidths=0,
+                   rasterized=True, marker='.')
+        a0.scatter(resid_bd['binnedphases']*P_orb*24,
+                   1e3*resid_bd['binnedmags']+dy, color=bincolor, s=18, alpha=1,
+                   zorder=5, linewidths=0)
+        a0.plot(mod_d['phase']*P_orb*24, 1e3*(mod_d['mags']-mod_d['mags'])+dy,
+                color=modelcolor, alpha=0.8, rasterized=False, lw=1, zorder=4)
 
     a0.set_ylabel('Relative flux [ppt]', fontsize='small')
     a0.set_xlabel('Hours from mid-transit', fontsize='small')
@@ -654,10 +660,16 @@ def plot_singlepanelphasefold(m, summdf, outpath, txt=None, dyfactor=4, overwrit
     a0.yaxis.set_tick_params(labelsize='small')
 
     if isinstance(txt, str):
-        props = dict(boxstyle='square', facecolor='white', alpha=0.95, pad=0.15,
-                     linewidth=0)
-        a0.text(0.98, 0.04, txt, transform=a0.transAxes, ha='right',va='bottom',
-                color='k', zorder=43, fontsize='small', bbox=props)
+        if not darkcolors:
+            props = dict(boxstyle='square', facecolor='white', alpha=0.95,
+                         pad=0.15, linewidth=0)
+        else:
+            props = dict(boxstyle='square', facecolor='black', alpha=0.95,
+                         pad=0.15, linewidth=0)
+        textcolor = 'black' if not darkcolors else 'white'
+        a0.text(0.98, 0.04, txt, transform=a0.transAxes,
+                ha='right',va='bottom', zorder=43, fontsize='small',
+                bbox=props, color=textcolor)
 
     if showerror:
         trans = transforms.blended_transform_factory(
@@ -674,9 +686,10 @@ def plot_singlepanelphasefold(m, summdf, outpath, txt=None, dyfactor=4, overwrit
             ydiff = np.abs(a0.get_ylim()[1] - a0.get_ylim()[0])
             _y = a0.get_ylim()[0] + 0.6*ydiff
 
+            ecolor = 'black' if not darkcolors else 'white'
             a0.errorbar(
                 0.85, _y, yerr=errorfactor*_e,
-                fmt='none', ecolor='black', alpha=1, elinewidth=1, capsize=2,
+                fmt='none', ecolor=ecolor, alpha=1, elinewidth=1, capsize=2,
                 transform=trans, zorder=10000
             )
 
@@ -684,6 +697,19 @@ def plot_singlepanelphasefold(m, summdf, outpath, txt=None, dyfactor=4, overwrit
 
         else:
             raise NotImplementedError
+
+    if darkcolors:
+        a0.spines['bottom'].set_color('white')
+        a0.spines['top'].set_color('white')
+        a0.spines['left'].set_color('white')
+        a0.spines['right'].set_color('white')
+        a0.xaxis.label.set_color('white')
+        a0.yaxis.label.set_color('white')
+        a0.tick_params(axis='both', colors='white', which='minor')
+        a0.tick_params(axis='both', colors='white', which='major')
+
+        fig.patch.set_alpha(0)
+        a0.patch.set_alpha(0)
 
     fig.tight_layout()
 
